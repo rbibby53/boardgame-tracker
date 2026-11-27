@@ -1,0 +1,10 @@
+services:
+  boardgames:
+    image: ghcr.io/rbibby53/boardgame-tracker:latest
+    container_name: boardgames
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data          # SQLite database lives here; back this up
+    ports:
+      - "8000:8000"           # put your reverse proxy (Traefik/Caddy/NPM) in front for TLS

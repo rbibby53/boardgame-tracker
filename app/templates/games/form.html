@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit " ~ game.name if game else "Add game" }} · {{ settings.app_name }}{% endblock %}
+{% set f = form if form else {} %}
+{% macro val(name, default="") -%}{{ f[name] if name in f else default }}{%- endmacro %}
+{% block content %}
+<div class="page-head"><h1>{{ "Edit " ~ game.name if game else "Add a game" }}</h1></div>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<form method="post" action="{{ '/games/' ~ game.id if game else '/games' }}" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="next" value="{{ request.query_params.get('next', '') }}">
+  <div class="fields">
+    <div class="wide"><label for="name">Name</label>
+      <input type="text" id="name" name="name" required maxlength="200" value="{{ val('name', game.name if game else '') }}" autofocus></div>
+    <div><label for="scoring">How is it won?</label>
+      {% set cur = val('scoring', game.scoring if game else 'high') %}
+      <select id="scoring" name="scoring">{% for k, v in SCORING_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if cur == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div><label>&nbsp;</label>
+      {% set ur = ('uses_rounds' in f) if form else (game.uses_rounds if game else false) %}
+      <label class="check"><input type="checkbox" name="uses_rounds" {{ 'checked' if ur }}> Score by round by default</label></div>
+    <div><label for="round_label">What's a round called? <span class="hint">Round, Hand, Era, Age…</span></label>
+      <input type="text" id="round_label" name="round_label" maxlength="40" placeholder="Round" value="{{ val('round_label', game.round_label if game and game.round_label else '') }}"></div>
+    <div><label for="min_players">Min players</label>
+      <input type="number" id="min_players" name="min_players" min="1" value="{{ val('min_players', game.min_players if game and game.min_players else '') }}"></div>
+    <div><label for="max_players">Max players</label>
+      <input type="number" id="max_players" name="max_players" min="1" value="{{ val('max_players', game.max_players if game and game.max_players else '') }}"></div>
+    <div><label for="bgg_id">BoardGameGeek ID <span class="hint">optional</span></label>
+      <input type="number" id="bgg_id" name="bgg_id" min="1" value="{{ val('bgg_id', game.bgg_id if game and game.bgg_id else '') }}"></div>
+    <div class="wide"><label for="notes">Notes <span class="hint">house rules, setup reminders</span></label>
+      <textarea id="notes" name="notes">{{ val('notes', game.notes if game and game.notes else '') }}</textarea></div>
+  </div>
+  <div class="form-actions">
+    <a class="btn ghost" href="{{ '/games/' ~ game.id if game else '/games' }}">Cancel</a>
+    <button class="btn primary">{{ "Save" if game else "Add game" }}</button>
+  </div>
+</form>
+{% endblock %}

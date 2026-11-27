@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit play" if play else "Log a play" }} · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ "Edit play" if play else "Log a play" }}</h1>
+  {% if play %}<a class="btn ghost" href="/plays/{{ play.id }}">Cancel</a>{% endif %}</div>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+
+<form method="post" action="{{ '/plays/' ~ play.id if play else '/plays' }}" id="playForm" class="stack" novalidate>
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="payload" id="payload">
+
+  <section class="card">
+    <div class="fields">
+      <div>
+        <label for="game_id">Game <a class="hint" href="/games/new?next=log">+ new game</a></label>
+        <select name="game_id" id="game_id" required>
+          <option value="">Choose a game…</option>
+          {% for g in games %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+        </select>
+        <div class="hint" id="scoringHint"></div>
+      </div>
+      <div>
+        <label for="played_at">When</label>
+        <input type="datetime-local" name="played_at" id="played_at" value="{{ now }}" required>
+      </div>
+      <div>
+        <label for="location">Where <span class="hint">optional</span></label>
+        <input type="text" name="location" id="location" maxlength="200" value="{{ form.location if form else (play.location if play and play.location else '') }}" list="locs" placeholder="Home, game store…">
+      </div>
+      <div>
+        <label for="duration_min">Length (minutes) <span class="hint">optional</span></label>
+        <input type="number" name="duration_min" id="duration_min" min="1" inputmode="numeric" value="{{ form.duration_min if form else (play.duration_min if play and play.duration_min else '') }}">
+      </div>
+      <div class="wide">
+        <label for="expansions">Expansions / variant <span class="hint">optional</span></label>
+        <input type="text" name="expansions" id="expansions" maxlength="500" value="{{ form.expansions if form else (play.expansions if play and play.expansions else '') }}">
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row" style="margin-bottom:.6rem"><h2 style="margin:0">Who played</h2><span class="spacer"></span>
+      <button type="button" class="btn sm" id="sameAsLast" hidden>Same players as last time</button></div>
+    <div class="chips" id="playerChips"></div>
+    <div class="row" style="margin-top:.6rem">
+      <input type="text" id="guestName" placeholder="Add a guest player…" style="max-width:260px" maxlength="150">
+      <button type="button" class="btn sm" id="addGuest">Add</button>
+    </div>
+  </section>
+
+  <section class="card" id="scoreCard">
+    <div class="row" style="margin-bottom:.75rem">
+      <h2 style="margin:0">Scores</h2><span class="spacer"></span>
+      <label class="check" id="roundsToggleWrap"><input type="checkbox" id="useRounds"> <span>Track <span id="roundWord">round</span>s</span></label>
+    </div>
+
+    <div id="roundsWrap" hidden>
+      <div class="score-grid"><table id="roundsTable"></table></div>
+      <div class="row" style="margin:.6rem 0 1rem"><button type="button" class="btn sm" id="addRound">+ Add <span class="rw">round</span></button>
+        <span class="hint">Totals fill in automatically. Tick "won" for whoever took the <span class="rw">round</span>.</span></div>
+    </div>
+
+    <div id="coopBox" class="coop-box" hidden>
+      <label class="check"><input type="checkbox" id="coopWon"> <span>We beat the game 🎉</span></label>
+    </div>
+
+    <div id="seatsBox">
+      <div class="row" style="margin-bottom:.25rem">
+        <span class="hint" id="seatHint"></span><span class="spacer"></span>
+        <div class="seg" id="winnerMode">
+          <label><input type="radio" name="wm" value="auto"> Auto winner</label>
+          <label><input type="radio" name="wm" value="manual"> Pick winner</label>
+        </div>
+      </div>
+      <div id="seats"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <label for="notes">Notes <span class="hint">optional: house rules, memorable moments, trash talk</span></label>
+    <textarea name="notes" id="notes">{{ form.notes if form else (play.notes if play and play.notes else '') }}</textarea>
+  </section>
+
+  <div class="form-actions">
+    <button class="btn primary" type="submit">{{ "Save changes" if play else "Save play" }}</button>
+  </div>
+</form>
+
+<datalist id="locs">{% for l in locations %}<option value="{{ l }}">{% endfor %}</datalist>
+<script type="application/json" id="boot">{{ boot|tojson }}</script>
+<script src="/static/play-form.js" defer></script>
+{% endblock %}

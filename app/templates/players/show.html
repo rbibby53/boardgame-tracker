@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar, who, play_list, chart %}
+{% block title %}{{ p.display_name }} · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="row" style="gap:.9rem">
+    {{ avatar(p, "lg") }}
+    <div><h1 style="margin:0">{{ p.display_name }}</h1>
+      <p class="muted small">{% if p.username %}@{{ p.username }} · {% endif %}{{ "Guest" if p.source == "local" else "SSO account" }}{% if not p.is_active %} · inactive{% endif %}{% if p.is_admin %} · admin{% endif %}</p></div>
+  </div>
+</div>
+
+<div class="grid stats" style="margin-bottom:1rem">
+  <div class="card stat"><div class="v">{{ summary.plays }}</div><div class="l">Plays</div></div>
+  <div class="card stat"><div class="v">{{ summary.wins }}</div><div class="l">Competitive wins</div></div>
+  <div class="card stat"><div class="v">{{ (summary.wins / summary.comp)|pct if summary.comp else "—" }}</div><div class="l">Win rate</div></div>
+  {% if summary.coop %}<div class="card stat"><div class="v">{{ summary.coop_wins }}/{{ summary.coop }}</div><div class="l">Co-op wins</div></div>{% endif %}
+  <div class="card stat"><div class="v">{{ summary.games }}</div><div class="l">Different games</div></div>
+</div>
+
+<div class="grid two">
+  <section class="card flush">
+    <h2>By game</h2>
+    {% if per_game %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Game</th><th class="num">Plays</th><th class="num">Wins</th><th class="num">Win %</th><th class="num">Best</th></tr></thead>
+      <tbody>{% for g in per_game %}
+        <tr><td><a href="/games/{{ g.game.id }}">{{ g.game.name }}</a></td><td class="num">{{ g.plays }}</td><td class="num">{{ g.wins }}</td><td class="num">{{ g.win_rate|pct }}</td><td class="num">{{ g.best|score }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">No plays yet.</div>{% endif %}
+  </section>
+  <section class="card flush">
+    <h2>Head to head</h2>
+    {% if h2h %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>Opponent</th><th class="num">Games</th><th class="num">{{ p.display_name.split()[0] }} won</th><th class="num">They won</th></tr></thead>
+      <tbody>{% for o in h2h %}
+        <tr><td>{{ who(o.player) }}</td><td class="num">{{ o.together }}</td><td class="num">{{ o.mine }}</td><td class="num">{{ o.theirs }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">No competitive games with others yet.</div>{% endif %}
+  </section>
+</div>
+
+{% if wins_series %}
+<section class="card" style="margin-top:1rem"><h2>Wins over time</h2>{{ chart("winsChart", wins_series, "cumulative", 220) }}</section>
+{% endif %}
+
+<section class="card flush" style="margin-top:1rem">
+  <h2>Recent plays</h2>
+  {{ play_list(recent) }}
+  {% if summary.plays > 10 %}<div style="padding:0 1rem 1rem"><a class="small" href="/plays?player={{ p.id }}">All plays →</a></div>{% endif %}
+</section>
+
+{% if can_edit %}
+<section class="card" style="margin-top:1rem">
+  <h2>Settings</h2>
+  <form method="post" action="/players/{{ p.id }}" class="row">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% if p.source == "local" %}<input type="text" name="display_name" value="{{ p.display_name }}" maxlength="150" style="max-width:240px" aria-label="Name">{% endif %}
+    <label class="check" style="margin:0">Chart color <input type="color" name="color" value="{{ color }}"></label>
+    <button class="btn sm">Save</button>
+  </form>
+  {% if p.source == "sso" %}<p class="small muted">Name, email and avatar come from SSO and refresh on sign-in and sync.</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

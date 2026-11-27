@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import avatar %}
+{% block title %}Players · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ "Inactive players" if inactive else "Players" }}</h1>
+    <p class="muted small">Players with accounts come from SSO. Guests are local players without a login.</p></div>
+  <div class="row">
+    <a class="btn sm ghost" href="/players{{ '' if inactive else '?inactive=true' }}">{{ "Active" if inactive else "Inactive" }}</a>
+    <form method="post" action="/players" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="name" placeholder="Guest name" required maxlength="150" style="width:180px">
+      <button class="btn sm">+ Add guest</button>
+    </form>
+  </div>
+</div>
+<div class="card flush">
+  {% if players %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Player</th><th></th><th class="num">Plays</th><th class="num">Wins</th></tr></thead>
+    <tbody>
+    {% for p in players %}
+      <tr>
+        <td><a class="who" href="/players/{{ p.id }}">{{ avatar(p) }}<span class="n">{{ p.display_name }}</span></a>
+          {% if p.username %}<span class="muted small"> @{{ p.username }}</span>{% endif %}</td>
+        <td>{% if p.source == "local" %}<span class="tag">guest</span>{% endif %}{% if p.is_admin %} <span class="tag">admin</span>{% endif %}</td>
+        <td class="num">{{ counts.get(p.id, 0) }}</td>
+        <td class="num">{{ wins.get(p.id, 0) }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<div class="empty">No players.</div>{% endif %}
+</div>
+{% endblock %}

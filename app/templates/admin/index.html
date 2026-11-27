@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Admin · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Admin</h1></div>
+<div class="grid two">
+  <section class="card">
+    <h2>Authentik user sync</h2>
+    <dl class="kv small">
+      <dt>Status</dt><dd>{{ "Enabled" if cfg.sync_enabled else "Not configured" }}</dd>
+      <dt>Authentik</dt><dd>{{ cfg.authentik_url or "—" }}</dd>
+      <dt>Group</dt><dd>{{ cfg.group }}</dd>
+      <dt>Sub mode</dt><dd><code>{{ cfg.sub_mode }}</code></dd>
+      <dt>Interval</dt><dd>{{ cfg.interval }} min</dd>
+      <dt>Admin group</dt><dd>{{ cfg.admin_group }}</dd>
+      <dt>Allowed group</dt><dd>{{ cfg.allowed_group }}</dd>
+      <dt>OIDC issuer</dt><dd style="word-break:break-all">{{ cfg.issuer or "—" }}</dd>
+    </dl>
+    <form method="post" action="/admin/sync" style="margin-top:1rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn primary" {{ 'disabled' if not cfg.sync_enabled }}>Sync now</button>
+    </form>
+  </section>
+  <section class="card flush">
+    <h2>Recent syncs</h2>
+    {% if logs %}
+    <div class="table-wrap"><table>
+      <thead><tr><th>When</th><th>Result</th></tr></thead>
+      <tbody>{% for l in logs %}
+        <tr><td class="nowrap small">{{ l.ran_at|utc("%b %-d %-I:%M %p") }}</td>
+          <td class="small">{% if l.ok %}<span class="tag">ok</span> +{{ l.created }} new · {{ l.updated }} updated · {{ l.deactivated }} deactivated{% else %}<span class="tag" style="color:var(--err-ink)">failed</span> {{ l.message }}{% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">No syncs yet.</div>{% endif %}
+  </section>
+</div>
+
+<div class="grid two" style="margin-top:1rem">
+  <section class="card">
+    <h2>Merge a guest into a player</h2>
+    <p class="small muted">Use this when a guest later gets an SSO account. All of the guest's plays move to the target, and then the guest is deleted.</p>
+    {% if guests %}
+    <form method="post" action="/admin/merge" class="stack" onsubmit="return confirm('Merge these players? This cannot be undone.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="fields">
+        <div><label>Guest</label><select name="guest_id">{% for g in guests %}<option value="{{ g.id }}">{{ g.display_name }}</option>{% endfor %}</select></div>
+        <div><label>Into</label><select name="target_id">{% for p in sso_players %}<option value="{{ p.id }}">{{ p.display_name }}{% if p.username %} (@{{ p.username }}){% endif %}</option>{% endfor %}
+          {% for g in guests %}<option value="{{ g.id }}">{{ g.display_name }} (guest)</option>{% endfor %}</select></div>
+      </div>
+      <div><button class="btn">Merge</button></div>
+    </form>
+    {% else %}<div class="empty">No guest players.</div>{% endif %}
+  </section>
+  <section class="card flush">
+    <h2>Guest players</h2>
+    {% if guests %}
+    <div class="table-wrap"><table><tbody>
+      {% for g in guests %}
+      <tr><td><a href="/players/{{ g.id }}">{{ g.display_name }}</a>{% if not g.is_active %} <span class="tag">hidden</span>{% endif %}</td>
+        <td class="num"><form class="inline" method="post" action="/admin/players/{{ g.id }}/active"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">{{ "Unhide" if not g.is_active else "Hide from picker" }}</button></form></td></tr>
+      {% endfor %}
+    </tbody></table></div>
+    {% else %}<div class="empty">No guest players.</div>{% endif %}
+  </section>
+</div>
+{% endblock %}

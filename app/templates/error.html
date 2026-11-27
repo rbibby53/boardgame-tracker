@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="login-wrap"><div class="card login-card">
+  <h1>{{ title }}</h1>
+  <p class="muted">{{ detail }}</p>
+  <div class="row" style="justify-content:center"><a class="btn" href="/">Home</a>{% if not user %}<a class="btn primary" href="/login">Sign in</a>{% endif %}</div>
+</div></div>
+{% endblock %}

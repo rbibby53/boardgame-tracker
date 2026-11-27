@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="login-wrap"><div class="card login-card stack">
+  <h1>Dev sign-in</h1>
+  <p class="muted small">SSO is bypassed because DEV_MODE=true.</p>
+  {% if players %}
+  <form method="post" action="/dev-login" class="stack">
+    <select name="player_id">{% for p in players %}<option value="{{ p.id }}">{{ p.display_name }}{% if p.is_admin %} (admin){% endif %}</option>{% endfor %}</select>
+    <button class="btn primary" style="width:100%">Sign in as selected</button>
+  </form>
+  {% endif %}
+  <form method="post" action="/dev-login" class="stack">
+    <input type="text" name="new_name" placeholder="New player name" required>
+    <button class="btn" style="width:100%">Create &amp; sign in (admin)</button>
+  </form>
+</div></div>
+{% endblock %}

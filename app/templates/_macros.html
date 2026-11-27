@@ -1,0 +1,40 @@
+{% macro avatar(p, size="") -%}
+<span class="avatar {{ size }}" style="--c: {{ p.display_color }}" aria-hidden="true">
+  {%- if p.avatar_url %}<img src="{{ p.avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">{% endif -%}
+  {{ p.initials }}
+</span>
+{%- endmacro %}
+
+{% macro who(p, link=True, size="") -%}
+{% if link %}<a class="who" href="/players/{{ p.id }}">{% else %}<span class="who">{% endif %}
+  {{ avatar(p, size) }}<span class="n">{{ p.display_name }}</span>
+{% if link %}</a>{% else %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro play_list(plays, show_game=True) -%}
+{% if plays %}
+<ul class="plays">
+  {% for play in plays %}
+  <li><a class="item" href="/plays/{{ play.id }}">
+    <span class="g">{% if show_game %}{{ play.game.name }}{% else %}{{ play.played_at|dt("%A") }}{% endif %}
+      {% if play.game.scoring == "coop" %}<span class="tag {{ 'win' if play.coop_won }}">{{ "Team win" if play.coop_won else "Game won" }}</span>{% endif %}
+    </span>
+    <span class="d nowrap">{{ play.played_at|dt("%b %-d, %Y") }}</span>
+    <span class="ppl">
+      {% for s in play.ordered_seats %}
+        <span class="{{ 'w' if s.is_winner and play.game.scoring != 'coop' }}">{% if s.is_winner and play.game.scoring != 'coop' %}🏆 {% endif %}{{ s.player.display_name }}{% if s.score is not none %} · {{ s.score|score }}{% endif %}</span>
+      {% endfor %}
+    </span>
+  </a></li>
+  {% endfor %}
+</ul>
+{% else %}
+<div class="empty">No plays yet.</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro chart(id, series, kind="score", height=280) -%}
+<div class="chart-box" style="height: {{ height }}px"><canvas id="{{ id }}"></canvas></div>
+<script type="application/json" id="{{ id }}-data">{{ series|tojson }}</script>
+<script>window.addEventListener("DOMContentLoaded", () => GN.lineChart("{{ id }}", "{{ kind }}"));</script>
+{%- endmacro %}

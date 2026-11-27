@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_macros.html" import play_list %}
+{% block title %}Plays · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Plays</h1><p class="muted">{{ total }} logged</p></div>
+  <div class="row">
+    <a class="btn sm" href="/export/plays.csv">Export CSV</a>
+    <a class="btn sm" href="/export/plays.json">Export JSON</a>
+  </div>
+</div>
+<form class="filters" method="get" style="margin-bottom:1rem">
+  <select name="game" onchange="this.form.submit()"><option value="">All games</option>
+    {% for g in games %}<option value="{{ g.id }}" {{ 'selected' if f_game == g.id }}>{{ g.name }}</option>{% endfor %}</select>
+  <select name="player" onchange="this.form.submit()"><option value="">Anyone</option>
+    {% for p in players %}<option value="{{ p.id }}" {{ 'selected' if f_player == p.id }}>{{ p.display_name }}</option>{% endfor %}</select>
+  {% if f_game or f_player %}<a class="btn sm ghost" href="/plays">Clear</a>{% endif %}
+  <noscript><button class="btn sm">Filter</button></noscript>
+</form>
+<div class="card flush">{{ play_list(plays) }}</div>
+{% if pages > 1 %}
+<div class="pager">
+  {% set qs = ("&game=" ~ f_game if f_game else "") ~ ("&player=" ~ f_player if f_player else "") %}
+  {% if page > 1 %}<a class="btn sm" href="?page={{ page - 1 }}{{ qs }}">← Newer</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn sm" href="?page={{ page + 1 }}{{ qs }}">Older →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

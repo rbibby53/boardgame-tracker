@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% from "_macros.html" import who, play_list, chart %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Hi, {{ user.display_name.split()[0] }}</h1>
+  <p class="muted">You've played {{ totals.my_plays }} time{{ 's' if totals.my_plays != 1 }} and won {{ totals.my_wins }}.</p></div>
+  <a class="btn primary" href="/plays/new">+ Log a play</a>
+</div>
+
+<div class="grid stats" style="margin-bottom:1rem">
+  <div class="card stat"><div class="v">{{ totals.plays }}</div><div class="l">Plays logged</div></div>
+  <div class="card stat"><div class="v">{{ totals.games }}</div><div class="l">Games</div></div>
+  <div class="card stat"><div class="v">{{ totals.players }}</div><div class="l">Players</div></div>
+</div>
+
+<div class="grid two">
+  <section class="card flush">
+    <h2>Latest plays</h2>
+    {{ play_list(latest) }}
+    {% if latest %}<div style="padding: 0 1rem 1rem"><a href="/plays" class="small">All plays →</a></div>{% endif %}
+  </section>
+
+  <section class="card flush">
+    <div class="row" style="padding:1rem 1rem 0"><h2 style="margin:0">Leaderboard</h2><span class="spacer"></span>
+      <div class="seg" role="tablist">
+        <label><input type="radio" name="lb" value="recent" checked onchange="GN.tab('lb', this.value)">90 days</label>
+        <label><input type="radio" name="lb" value="all" onchange="GN.tab('lb', this.value)">All time</label>
+      </div>
+    </div>
+    {% for key, board in [("recent", board_recent), ("all", board_all)] %}
+    <div class="table-wrap" data-tab="lb" data-key="{{ key }}" {% if key != "recent" %}hidden{% endif %}>
+      {% if board %}
+      <table>
+        <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Plays</th><th class="num">Win %</th></tr></thead>
+        <tbody>
+        {% for r in board %}
+          <tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td><td class="num">{{ r.win_rate|pct }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<div class="empty">Nothing here yet.</div>{% endif %}
+    </div>
+    {% endfor %}
+    <p class="small muted" style="padding:0 1rem">Competitive games only. Co-op results show on each game's page.</p>
+  </section>
+</div>
+
+{% if wins_series %}
+<section class="card" style="margin-top:1rem">
+  <h2>Wins over time</h2>
+  {{ chart("winsChart", wins_series, "cumulative") }}
+</section>
+{% endif %}
+
+{% if most_played %}
+<section class="card" style="margin-top:1rem">
+  <h2>Most played</h2>
+  <div class="chips">{% for g, n in most_played %}<a class="chip add" style="border-style:solid;color:var(--text)" href="/games/{{ g.id }}">{{ g.name }} <span class="tag">{{ n }}</span></a>{% endfor %}</div>
+</section>
+{% endif %}
+{% endblock %}

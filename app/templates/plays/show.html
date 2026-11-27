@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import who %}
+{% block title %}{{ play.game.name }} · {{ play.played_at|dt("%b %-d") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><a href="/games/{{ play.game.id }}" style="color:inherit">{{ play.game.name }}</a></h1>
+    <p class="muted">{{ play.played_at|dt("%A, %B %-d, %Y · %-I:%M %p") }}</p>
+  </div>
+  {% if can_edit %}
+  <div class="row">
+    <a class="btn" href="/plays/{{ play.id }}/edit">Edit</a>
+    <form class="inline" method="post" action="/plays/{{ play.id }}/delete" onsubmit="return confirm('Delete this play? This cannot be undone.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Delete</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<div class="grid two">
+  <section class="card flush">
+    <h2>{% if play.game.scoring == "coop" %}{{ "🎉 The team won" if play.coop_won else "The game won" }}{% else %}Results{% endif %}</h2>
+    <div class="table-wrap">
+    <table class="podium">
+      <thead><tr><th>#</th><th>Player</th>{% if seats|selectattr("team")|list %}<th>Team</th>{% endif %}<th class="num">Score</th></tr></thead>
+      <tbody>
+      {% for s in seats %}
+        <tr class="{{ 'win' if s.is_winner and play.game.scoring != 'coop' }}">
+          <td class="place">{% if s.is_winner and play.game.scoring != 'coop' %}🏆{% else %}{{ s.place or "" }}{% endif %}</td>
+          <td>{{ who(s.player) }}</td>
+          {% if seats|selectattr("team")|list %}<td>{{ s.team or "" }}</td>{% endif %}
+          <td class="num">{{ s.score|score }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% if play.winners_manual %}<p class="small muted" style="padding:0 1rem">Winner chosen manually.</p>{% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="kv">
+      {% if play.location %}<dt>Where</dt><dd>{{ play.location }}</dd>{% endif %}
+      {% if play.duration_min %}<dt>Length</dt><dd>{{ play.duration_min // 60 ~ "h " if play.duration_min >= 60 }}{{ play.duration_min % 60 }}m</dd>{% endif %}
+      {% if play.expansions %}<dt>Expansions</dt><dd>{{ play.expansions }}</dd>{% endif %}
+      <dt>Scoring</dt><dd>{{ play.game.scoring_label }}</dd>
+      <dt>Logged by</dt><dd>{{ play.created_by.display_name if play.created_by else "—" }} <span class="muted small">· {{ play.created_at|utc }}</span></dd>
+    </dl>
+    {% if play.notes %}<h3 style="margin-top:1rem">Notes</h3><p class="notes">{{ play.notes }}</p>{% endif %}
+  </section>
+</div>
+
+{% if play.rounds %}
+<section class="card flush" style="margin-top:1rem">
+  <h2>{{ play.game.round_label or "Round" }}s</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th></th>{% for s in play.seats %}<th class="num">{{ s.player.display_name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in play.rounds %}
+      {% set by = {} %}{% for rs in r.scores %}{% set _ = by.update({rs.player_id: rs}) %}{% endfor %}
+      <tr><td>{{ r.label or ((play.game.round_label or "Round") ~ " " ~ r.number) }}</td>
+      {% for s in play.seats %}{% set rs = by.get(s.player_id) %}
+        <td class="num {{ 'round-win' if rs and rs.won }}">{% if rs %}{{ rs.score|score if rs.score is not none else "" }}{% if rs.won %} ★{% endif %}{% endif %}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td><strong>Total</strong></td>{% for s in play.seats %}<td class="num"><strong>{{ s.score|score }}</strong></td>{% endfor %}</tr></tfoot>
+  </table>
+  </div>
+  <p class="small muted" style="padding:0 1rem">★ = won the {{ (play.game.round_label or "round")|lower }}</p>
+</section>
+{% endif %}
+{% endblock %}
