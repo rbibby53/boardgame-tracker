@@ -4,11 +4,11 @@ import io
 import json
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import importer, notify, ratings, stats
+from .. import backup, importer, notify, ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -25,6 +25,7 @@ def admin_home(request: Request, user: Player = Depends(require_admin), db: Sess
     s = get_settings()
     return render(request, "admin/index.html", {
         "logs": db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(15)).all(),
+        "backups": backup.list_backups() if s.is_sqlite else [],
         "guests": db.scalars(select(Player).where(Player.source == "local").order_by(Player.display_name)).all(),
         "sso_players": db.scalars(select(Player).where(Player.source == "sso", Player.is_active.is_(True))
                                   .order_by(Player.display_name)).all(),
@@ -37,6 +38,9 @@ def admin_home(request: Request, user: Player = Depends(require_admin), db: Sess
             "admin_group": s.oidc_admin_group or "(not set: Authentik superusers become admins via sync)",
             "allowed_group": s.oidc_allowed_group or "(not set)",
             "issuer": s.oidc_issuer,
+            "is_sqlite": s.is_sqlite,
+            "backup_hour": s.backup_hour,
+            "backup_keep": s.backup_keep,
             "notify": [n for n, on in (("ntfy", s.ntfy_url), ("Discord", s.discord_webhook_url),
                                        ("webhook", s.notify_webhook_url)) if on],
         },
@@ -112,6 +116,27 @@ def merge_guest(request: Request, guest_id: int = Form(...), target_id: int = Fo
     ratings.invalidate()
     flash(request, f"Merged {guest.display_name} into {target.display_name}.")
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------- backups
+
+
+@router.post("/admin/backup", dependencies=[Depends(verify_csrf)])
+async def backup_now(request: Request, user: Player = Depends(require_admin)):
+    try:
+        p = await asyncio.to_thread(backup.run_backup)
+        flash(request, f"Backup written: {p.name}")
+    except backup.BackupError as e:
+        flash(request, str(e), "err")
+    return RedirectResponse("/admin#backups", status_code=303)
+
+
+@router.get("/admin/backups/{name}")
+def download_backup(name: str, user: Player = Depends(require_admin)):
+    p = backup.path_for(name)
+    if p is None:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="application/gzip", filename=name)
 
 
 # ---------------------------------------------------------------- import

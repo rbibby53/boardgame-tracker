@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth
+from . import auth, backup
 from .authentik import run_sync
 from .config import get_settings
 from .db import SessionLocal
@@ -45,18 +45,29 @@ async def _sync_loop():
         await asyncio.sleep(interval)
 
 
+async def _backup_loop():
+    while True:
+        await asyncio.sleep(backup.seconds_until_next())
+        try:
+            await asyncio.to_thread(backup.run_backup)
+        except Exception:
+            log.exception("Scheduled backup failed")
+
+
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     s = get_settings()
     run_migrations()
     if s.dev_mode:
         log.warning("DEV_MODE is on: SSO is bypassed. Never expose this instance.")
-    task = None
+    tasks = []
     if s.sync_enabled and s.authentik_sync_interval_minutes > 0:
-        task = asyncio.create_task(_sync_loop())
+        tasks.append(asyncio.create_task(_sync_loop()))
+    if s.is_sqlite and s.backup_keep > 0:
+        tasks.append(asyncio.create_task(_backup_loop()))
     yield
-    if task:
-        task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 def create_app() -> FastAPI:
