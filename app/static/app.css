@@ -234,11 +234,16 @@ a.badge:hover { background: var(--surface-2); text-decoration: none; }
 .bgg-results { list-style: none; padding: 0; margin: .4rem 0 0; display: flex; flex-direction: column; gap: .15rem; max-height: 260px; overflow-y: auto; }
 .bgg-results .btn { justify-content: flex-start; width: 100%; text-align: left; font-weight: 500; }
 @media (max-width: 560px) {
-  .score-grid td.rl { min-width: 74px; font-size: .85rem; }
-  .score-grid td.rl input { min-width: 74px; }
-  .score-grid th.pl { min-width: 0; font-size: .78rem; max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .score-grid input[type=number] { min-width: 50px; padding: .4rem .3rem; }
-  .score-grid th, .score-grid td { padding: .3rem .2rem; }
+  /* Fixed layout: player columns always share the screen width instead of scrolling sideways. */
+  .score-grid table { table-layout: fixed; width: 100%; min-width: 0; }
+  .score-grid thead th:first-child, .score-grid td.rl { width: 27%; font-size: .82rem; overflow-wrap: anywhere; }
+  #roundsTable thead th:last-child { width: 1.6rem; }
+  #roundsTable td:last-child .btn { padding: .2rem .1rem; min-width: 0; }
+  .score-grid td.rl input { min-width: 0; padding: .35rem .3rem; }
+  .score-grid th.pl { min-width: 0; font-size: .74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .score-grid input[type=number] { min-width: 0; padding: .4rem .25rem; }
+  .score-grid th, .score-grid td { padding: .3rem .15rem; }
+  .score-grid tfoot td { font-size: .85rem; }
 }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .poll-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .5rem; }
@@ -257,3 +262,5 @@ a.badge:hover { background: var(--surface-2); text-decoration: none; }
 .poll-bar { height: 6px; border-radius: 999px; background: var(--surface-2); position: relative; overflow: hidden; margin-top: .2rem; }
 .poll-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w, 0%); background: var(--accent); border-radius: inherit; transition: width .3s; }
 .poll-count { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+.perm-matrix td:first-child { min-width: 260px; }
+.perm-matrix input[type=checkbox] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }

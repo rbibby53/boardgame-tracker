@@ -63,10 +63,25 @@ templates.env.globals.update(SCORING_TYPES=SCORING_TYPES, V=ASSET_VERSION)
 templates.env.filters.update(score=fmt_score, dt=local_dt, utc=utc_to_local, pct=pct, night=night_link)
 
 
+def _role_of_factory(request: Request):
+    """Lazy: only loads the permissions config if a template asks for someone's role."""
+    def role_of(player) -> str:
+        from . import permissions
+        from .db import SessionLocal
+
+        with SessionLocal() as db:
+            return permissions.role_of(player, permissions.load(db))
+    return role_of
+
+
 def render(request: Request, name: str, ctx: dict | None = None, status_code: int = 200):
     settings = get_settings()
+    perms = getattr(request.state, "perms", set())
     base = {
         "user": getattr(request.state, "user", None),
+        "role": getattr(request.state, "role", None),
+        "can": lambda perm: perm in perms,
+        "role_of": _role_of_factory(request),
         "csrf": csrf_token(request),
         "settings": settings,
         "flash": request.session.pop("flash", None),

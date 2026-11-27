@@ -17,14 +17,15 @@
   {% if poll.winner %}
     {% if poll.winner.has_cover %}<img class="cover" src="/covers/{{ poll.winner.id }}" alt="">{% endif %}
     <div><div class="small muted">The table has spoken</div><h2 style="margin:.1rem 0">{{ poll.winner.name }}</h2></div>
-    <span class="spacer"></span><a class="btn primary" href="/plays/new?game={{ poll.winner.id }}">Log it</a>
+    <span class="spacer"></span>{% if can('log_plays') %}<a class="btn primary" href="/plays/new?game={{ poll.winner.id }}">Log it</a>{% endif %}
   {% else %}<div><strong>Vote closed with no votes.</strong></div>{% endif %}
 </div>
 {% else %}
+{% if not boot.can_vote %}<div class="flash err">Your role can see this vote but not take part. Ask an admin if that's wrong.</div>{% endif %}
 <p class="small muted">Tap every game you'd happily play. Most votes wins; ties go to whichever was played longest ago. Results update live.</p>
 {% endif %}
 
-{% if poll.is_open and guests %}
+{% if poll.is_open and guests and boot.can_vote %}
 <div class="row" style="margin-bottom:.75rem">
   <label for="voteAs" style="margin:0">Voting as</label>
   <select id="voteAs" style="width:auto"><option value="">Me ({{ user.display_name }})</option>

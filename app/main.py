@@ -60,6 +60,10 @@ async def lifespan(app: FastAPI):
     run_migrations()
     if s.dev_mode:
         log.warning("DEV_MODE is on: SSO is bypassed. Never expose this instance.")
+    log.info("Serving at %s (put your reverse proxy in front; see README > Reverse proxy)", s.base_url)
+    if not s.secure_cookies and s.base_host.split(":")[0] not in ("localhost", "127.0.0.1"):
+        log.warning("BASE_URL is plain http on a real hostname: session cookies aren't marked Secure and the "
+                    "app can't be installed on phones. Terminate TLS at your proxy and use an https BASE_URL.")
     tasks = []
     if s.sync_enabled and s.authentik_sync_interval_minutes > 0:
         tasks.append(asyncio.create_task(_sync_loop()))

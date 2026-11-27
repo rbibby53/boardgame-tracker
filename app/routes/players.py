@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import fun, ratings, stats
-from ..auth import current_user, verify_csrf
+from ..auth import can, current_user, require, verify_csrf
 from ..db import get_db
 from ..models import Player, PlaySeat
 from ..templating import flash, render
@@ -15,8 +15,9 @@ router = APIRouter(prefix="/players")
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
-def _can_edit(user: Player, p: Player) -> bool:
-    return user.is_admin or user.id == p.id or (p.source == "local" and user.is_active)
+def _can_edit(request: Request, user: Player, p: Player) -> bool:
+    """Your own colour; guests if you can manage guests; anyone if admin."""
+    return can(request, "admin") or user.id == p.id or (p.source == "local" and can(request, "manage_guests"))
 
 
 @router.get("")
@@ -33,7 +34,8 @@ def list_players(request: Request, inactive: bool = False, user: Player = Depend
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_guest(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def create_guest(request: Request, user: Player = Depends(require("manage_guests")),
+                       db: Session = Depends(get_db)):
     """Add a local (non-SSO) player. Accepts a form post or JSON (from the log-a-play page)."""
     is_json = request.headers.get("content-type", "").startswith("application/json")
     data = await request.json() if is_json else dict(await request.form())
@@ -77,7 +79,7 @@ def show_player(player_id: int, request: Request, user: Player = Depends(current
         "rating": rt.overall_for(p.id),
         "rating_series": ratings.series(rt, plays, only_player=player_id),
         "color": stats.color_for(p),
-        "can_edit": _can_edit(user, p),
+        "can_edit": _can_edit(request, user, p),
         "summary": {
             "plays": len(plays),
             "wins": sum(s.is_winner for s in comp),
@@ -99,7 +101,7 @@ async def update_player(player_id: int, request: Request, user: Player = Depends
     p = db.get(Player, player_id)
     if p is None:
         raise HTTPException(404)
-    if not _can_edit(user, p):
+    if not _can_edit(request, user, p):
         raise HTTPException(403)
     form = await request.form()
     color = (form.get("color") or "").strip()

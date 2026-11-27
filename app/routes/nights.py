@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import nights as N
 from .. import stats
-from ..auth import current_user, verify_csrf
+from ..auth import current_user, require, verify_csrf
 from ..db import get_db
 from ..models import GameNight, Play, Player
 from ..templating import flash, render
@@ -59,7 +59,7 @@ def show_night(day: str, request: Request, user: Player = Depends(current_user),
 
 
 @router.post("/{day}", dependencies=[Depends(verify_csrf)])
-async def save_night(day: str, request: Request, user: Player = Depends(current_user),
+async def save_night(day: str, request: Request, user: Player = Depends(require("edit_nights")),
                      db: Session = Depends(get_db)):
     d = _parse(day)
     start, end = N.bounds(d)

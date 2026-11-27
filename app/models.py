@@ -47,7 +47,10 @@ class Player(Base):
     color: Mapped[str | None] = mapped_column(String(9))
     source: Mapped[str] = mapped_column(String(10), default="local")  # sso | local
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Forced admin: in OIDC_ADMIN_GROUP (or Authentik superuser when that isn't set). Roles: app/permissions.py
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    role_override: Mapped[str | None] = mapped_column(String(10))
+    groups: Mapped[str | None] = mapped_column(Text)  # JSON list of Authentik group names (login + sync)
     last_login: Mapped[datetime | None] = mapped_column(DateTime)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

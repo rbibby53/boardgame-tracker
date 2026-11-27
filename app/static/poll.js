@@ -21,7 +21,7 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "poll-btn";
-      btn.disabled = !state.open;
+      btn.disabled = !state.open || !state.can_vote;
       btn.setAttribute("aria-pressed", o.mine);
       btn.onclick = () => toggle(o);
 

@@ -6,7 +6,7 @@
   <div class="row" style="gap:.9rem">
     {{ avatar(p, "lg") }}
     <div><h1 style="margin:0">{{ p.display_name }}</h1>
-      <p class="muted small">{% if p.username %}@{{ p.username }} · {% endif %}{{ "Guest" if p.source == "local" else "SSO account" }}{% if not p.is_active %} · inactive{% endif %}{% if p.is_admin %} · admin{% endif %}</p></div>
+      <p class="muted small">{% if p.username %}@{{ p.username }} · {% endif %}{{ "Guest" if p.source == "local" else "SSO account" }}{% if not p.is_active %} · inactive{% endif %}{% if p.source == "sso" %} · {{ role_of(p) }}{% endif %}</p></div>
   </div>
 </div>
 

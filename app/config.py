@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator, model_validator
@@ -76,6 +77,17 @@ class Settings(BaseSettings):
     def strip_slash(cls, v: str) -> str:
         return v.rstrip("/")
 
+    @field_validator("base_url")
+    @classmethod
+    def check_base_url(cls, v: str) -> str:
+        u = urlparse(v)
+        if u.scheme not in ("http", "https") or not u.hostname:
+            raise ValueError("BASE_URL must look like https://games.example.com")
+        if u.path not in ("", "/") or u.query or u.fragment:
+            raise ValueError("BASE_URL can't include a path. Serve the app at the root of its own "
+                             "hostname (e.g. https://games.example.com), not under /something.")
+        return v
+
     @field_validator("timezone")
     @classmethod
     def check_tz(cls, v: str) -> str:
@@ -112,6 +124,10 @@ class Settings(BaseSettings):
     @property
     def oidc_metadata_url(self) -> str:
         return self.oidc_issuer.rstrip("/") + "/.well-known/openid-configuration"
+
+    @property
+    def base_host(self) -> str:
+        return urlparse(self.base_url).netloc.lower()
 
     @property
     def secure_cookies(self) -> bool:

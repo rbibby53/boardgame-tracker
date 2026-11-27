@@ -33,6 +33,9 @@ def client():
     with engine.begin() as conn:
         for t in reversed(Base.metadata.sorted_tables):
             conn.execute(t.delete())
+    from app import permissions
+
+    permissions.invalidate()
 
 
 @pytest.fixture()

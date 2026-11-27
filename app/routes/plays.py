@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import media, notify
-from ..auth import current_user, verify_csrf
+from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
 from ..db import get_db
 from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore, utcnow
@@ -38,8 +38,11 @@ def _get_play(db: Session, play_id: int) -> Play:
     return play
 
 
-def can_edit(user: Player, play: Play) -> bool:
-    return user.is_admin or play.created_by_id == user.id or any(s.player_id == user.id for s in play.seats)
+def can_edit(request: Request, user: Player, play: Play) -> bool:
+    if can(request, "edit_all_plays"):
+        return True
+    return can(request, "log_plays") and (
+        play.created_by_id == user.id or any(s.player_id == user.id for s in play.seats))
 
 
 def _form_context(db: Session, user: Player, play: Play | None, state: dict, error: str | None = None) -> dict:
@@ -198,7 +201,7 @@ def list_plays(request: Request, game: int | None = None, player: int | None = N
 
 
 @router.get("/new")
-def new_play(request: Request, game: int | None = None, user: Player = Depends(current_user),
+def new_play(request: Request, game: int | None = None, user: Player = Depends(require("log_plays")),
              db: Session = Depends(get_db)):
     state = {"game_id": game, "players": [{"player_id": user.id}], "rounds": [],
              "winners_manual": False, "coop_won": None}
@@ -207,7 +210,7 @@ def new_play(request: Request, game: int | None = None, user: Player = Depends(c
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_play(request: Request, background: BackgroundTasks, user: Player = Depends(current_user),
+async def create_play(request: Request, background: BackgroundTasks, user: Player = Depends(require("log_plays")),
                       db: Session = Depends(get_db)):
     play = Play()
     saved, state, error = await _apply_form(request, db, play, user)
@@ -230,14 +233,14 @@ async def create_play(request: Request, background: BackgroundTasks, user: Playe
 def show_play(play_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     play = _get_play(db, play_id)
     seat_order = sorted(play.seats, key=lambda s: (s.place is None, s.place or 0, not s.is_winner))
-    return render(request, "plays/show.html", {"play": play, "seats": seat_order, "can_edit": can_edit(user, play)})
+    return render(request, "plays/show.html", {"play": play, "seats": seat_order, "can_edit": can_edit(request, user, play)})
 
 
 @router.get("/{play_id}/edit")
 def edit_play(play_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     play = _get_play(db, play_id)
-    if not can_edit(user, play):
-        raise HTTPException(403, "You can only edit plays you logged or played in.")
+    if not can_edit(request, user, play):
+        raise HTTPException(403, "You can only edit plays you logged or played in (or your role doesn't allow editing).")
     return render(request, "plays/form.html", {**_form_context(db, user, play, _state_from_play(play)),
                                                "now": play.played_at.strftime("%Y-%m-%dT%H:%M")})
 
@@ -246,7 +249,7 @@ def edit_play(play_id: int, request: Request, user: Player = Depends(current_use
 async def update_play(play_id: int, request: Request, user: Player = Depends(current_user),
                       db: Session = Depends(get_db)):
     play = _get_play(db, play_id)
-    if not can_edit(user, play):
+    if not can_edit(request, user, play):
         raise HTTPException(403)
     saved, state, error = await _apply_form(request, db, play, user)
     if error:
@@ -263,7 +266,7 @@ async def update_play(play_id: int, request: Request, user: Player = Depends(cur
 @router.post("/{play_id}/delete", dependencies=[Depends(verify_csrf)])
 def delete_play(play_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     play = _get_play(db, play_id)
-    if not can_edit(user, play):
+    if not can_edit(request, user, play):
         raise HTTPException(403)
     keys = [ph.key for ph in play.photos]
     db.delete(play)

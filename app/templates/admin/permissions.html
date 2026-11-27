@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_macros.html" import who %}
+{% block title %}Permissions · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Roles &amp; permissions</h1><p class="muted"><a href="/admin">← Admin</a></p></div></div>
+
+<form method="post" action="/admin/permissions" class="stack">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="card flush">
+    <h2>What each role can do</h2>
+    <p class="small muted" style="padding:0 1rem">Everyone signed in can view everything. Admins can do everything, including this page.</p>
+    <div class="table-wrap"><table class="perm-matrix">
+      <thead><tr><th>Permission</th>{% for r in ROLES %}<th class="num">{{ LABELS[r] }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for key, label in PERMS.items() %}
+        <tr><td>{{ label }}</td>
+          {% for r in ROLES %}<td class="num">{% if r == "admin" %}<input type="checkbox" checked disabled aria-label="Admin always">
+            {% else %}<input type="checkbox" name="perm__{{ r }}__{{ key }}" value="1" {{ 'checked' if key in cfg.matrix[r] }} aria-label="{{ LABELS[r] }}: {{ label }}">{% endif %}</td>{% endfor %}</tr>
+      {% endfor %}</tbody>
+    </table></div>
+  </section>
+
+  <section class="card stack">
+    <h2>Who gets which role</h2>
+    <ol class="small" style="margin:0;padding-left:1.2rem">
+      <li>Members of <code>{{ admin_group or "OIDC_ADMIN_GROUP" }}</code> are always admins{% if not admin_group %} (not set: Authentik superusers become admins on sync){% endif %}.</li>
+      <li>Otherwise, a role set for a person below wins.</li>
+      <li>Otherwise, the highest role from their Authentik groups (mapped here).</li>
+      <li>Otherwise, the default role.</li>
+    </ol>
+    <div style="max-width:320px"><label for="default_role">Default role</label>
+      <select id="default_role" name="default_role">{% for r in ROLES if r != "admin" %}<option value="{{ r }}" {{ 'selected' if cfg.default_role == r }}>{{ LABELS[r] }}</option>{% endfor %}</select></div>
+
+    <div>
+      <label>Authentik group → role</label>
+      <datalist id="knownGroups">{% for g in known_groups %}<option value="{{ g }}">{% endfor %}</datalist>
+      <div class="stack" id="groupRows" style="gap:.4rem">
+        {% set rows = cfg.group_roles.items()|list %}
+        {% for i in range(rows|length + 3) %}{% set row = rows[i] if i < rows|length else ("", "") %}
+        <div class="row">
+          <input type="text" name="group_{{ i }}" value="{{ row[0] }}" list="knownGroups" placeholder="Group name, e.g. Board Game Managers" style="flex:1;min-width:200px" maxlength="150">
+          <select name="grouprole_{{ i }}" style="width:auto">{% for r in ROLES %}<option value="{{ r }}" {{ 'selected' if row[1] == r or (not row[1] and r == 'player') }}>{{ LABELS[r] }}</option>{% endfor %}</select>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="hint">Blank rows are ignored. Save to get more empty rows. Group names come from Authentik and are seen at sign-in and on each sync.</p>
+    </div>
+  </section>
+
+  <div class="form-actions" style="margin-top:0"><button class="btn primary">Save roles &amp; permissions</button></div>
+</form>
+
+<section class="card flush" id="people" style="margin-top:1rem">
+  <h2>People</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Person</th><th>Authentik groups</th><th>Role</th><th>Set role</th></tr></thead>
+    <tbody>{% for p, role, why, groups in people %}
+      <tr {% if not p.is_active %}class="muted"{% endif %}>
+        <td>{{ who(p) }}{% if not p.is_active %} <span class="tag">inactive</span>{% endif %}</td>
+        <td class="small muted">{{ groups|join(", ") or "—" }}</td>
+        <td class="nowrap"><strong>{{ LABELS[role] }}</strong> <span class="small muted">({{ why }})</span></td>
+        <td>{% if p.is_admin %}<span class="small muted">from admin group</span>{% else %}
+          <form method="post" action="/admin/permissions/user/{{ p.id }}" class="row" style="gap:.3rem">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <select name="role" style="width:auto" onchange="this.form.submit()" aria-label="Role for {{ p.display_name }}">
+              <option value="" {{ 'selected' if not p.role_override }}>Automatic</option>
+              {% for r in ROLES %}<option value="{{ r }}" {{ 'selected' if p.role_override == r }}>{{ LABELS[r] }}</option>{% endfor %}
+            </select><noscript><button class="btn sm">Set</button></noscript>
+          </form>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4" class="empty">No SSO accounts yet. They appear after sign-in or an Authentik sync.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endblock %}

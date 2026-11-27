@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .. import notify
-from ..auth import current_user, verify_csrf
+from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
 from ..db import get_db
 from ..models import Game, Play, Player, Poll, PollOption, PollVote, utcnow
@@ -29,8 +29,8 @@ def _load(db: Session, poll_id: int) -> Poll:
     return poll
 
 
-def can_manage(user: Player, poll: Poll) -> bool:
-    return user.is_admin or poll.created_by_id == user.id
+def can_manage(request: Request, user: Player, poll: Poll) -> bool:
+    return can(request, "admin") or (poll.created_by_id == user.id and can(request, "start_votes"))
 
 
 def tally(db: Session, poll: Poll) -> list[dict]:
@@ -56,14 +56,15 @@ def _voter(db: Session, user: Player, as_player: int | None) -> Player:
     return p
 
 
-def state(db: Session, poll: Poll, user: Player, voter: Player | None = None) -> dict:
+def state(request: Request, db: Session, poll: Poll, user: Player, voter: Player | None = None) -> dict:
     voter = voter or user
     rows = tally(db, poll)
     voters = {v.player_id for o in poll.options for v in o.votes}
     top = rows[0]["votes"] if rows else 0
     return {
         "open": poll.is_open,
-        "can_manage": can_manage(user, poll),
+        "can_manage": can_manage(request, user, poll),
+        "can_vote": can(request, "vote"),
         "voters": len(voters),
         "winner": ({"id": poll.winner.id, "name": poll.winner.name} if poll.winner else None),
         "options": [{
@@ -85,7 +86,8 @@ def list_polls(request: Request, user: Player = Depends(current_user), db: Sessi
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_poll(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def create_poll(request: Request, user: Player = Depends(require("start_votes")),
+                      db: Session = Depends(get_db)):
     form = await request.form()
     ids = []
     for v in form.getlist("game_ids"):
@@ -118,17 +120,18 @@ def show_poll(poll_id: int, request: Request, user: Player = Depends(current_use
     poll = _load(db, poll_id)
     guests = db.scalars(select(Player).where(Player.source == "local", Player.is_active.is_(True),
                                              Player.id != user.id).order_by(Player.display_name)).all()
-    return render(request, "polls/show.html", {"poll": poll, "boot": state(db, poll, user), "guests": guests})
+    return render(request, "polls/show.html", {"poll": poll, "boot": state(request, db, poll, user), "guests": guests})
 
 
 @router.get("/{poll_id}/state")
-def poll_state(poll_id: int, as_player: int | None = None, user: Player = Depends(current_user),
+def poll_state(poll_id: int, request: Request, as_player: int | None = None, user: Player = Depends(current_user),
                db: Session = Depends(get_db)):
-    return state(db, _load(db, poll_id), user, _voter(db, user, as_player))
+    return state(request, db, _load(db, poll_id), user, _voter(db, user, as_player))
 
 
 @router.post("/{poll_id}/vote", dependencies=[Depends(verify_csrf)])
-async def vote(poll_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def vote(poll_id: int, request: Request, user: Player = Depends(require("vote")),
+               db: Session = Depends(get_db)):
     poll = _load(db, poll_id)
     if not poll.is_open:
         raise HTTPException(409, "This vote is closed.")
@@ -144,14 +147,14 @@ async def vote(poll_id: int, request: Request, user: Player = Depends(current_us
         option.votes.remove(existing)
     db.commit()
     db.expire_all()
-    return state(db, _load(db, poll_id), user, voter)
+    return state(request, db, _load(db, poll_id), user, voter)
 
 
 @router.post("/{poll_id}/close", dependencies=[Depends(verify_csrf)])
 def close_poll(poll_id: int, request: Request, background: BackgroundTasks, user: Player = Depends(current_user),
                db: Session = Depends(get_db)):
     poll = _load(db, poll_id)
-    if not can_manage(user, poll):
+    if not can_manage(request, user, poll):
         raise HTTPException(403, "Only whoever started the vote (or an admin) can close it.")
     if poll.is_open:
         rows = tally(db, poll)
@@ -172,7 +175,7 @@ def close_poll(poll_id: int, request: Request, background: BackgroundTasks, user
 @router.post("/{poll_id}/delete", dependencies=[Depends(verify_csrf)])
 def delete_poll(poll_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     poll = _load(db, poll_id)
-    if not can_manage(user, poll):
+    if not can_manage(request, user, poll):
         raise HTTPException(403)
     db.delete(poll)
     db.commit()

@@ -13,12 +13,12 @@
     </div>
   </div>
   <div class="row">
-    <a class="btn" href="/games/{{ game.id }}/edit">Edit</a>
-    {% if user.is_admin %}
+    {% if can('manage_games') %}<a class="btn" href="/games/{{ game.id }}/edit">Edit</a>{% endif %}
+    {% if can('archive_games') %}
     <form class="inline" method="post" action="/games/{{ game.id }}/archive"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">{{ "Restore" if game.archived else "Archive" }}</button></form>
     {% if play_count == 0 %}<form class="inline" method="post" action="/games/{{ game.id }}/delete" onsubmit="return confirm('Delete this game?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Delete</button></form>{% endif %}
     {% endif %}
-    <a class="btn primary" href="/plays/new?game={{ game.id }}">+ Log a play</a>
+    {% if can('log_plays') %}<a class="btn primary" href="/plays/new?game={{ game.id }}">+ Log a play</a>{% endif %}
   </div>
 </div>
 
