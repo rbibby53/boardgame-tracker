@@ -3,12 +3,12 @@ import csv
 import io
 import json
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import backup, importer, notify, ratings, stats
+from .. import backup, collection, importer, notify, ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -137,6 +137,66 @@ def download_backup(name: str, user: Player = Depends(require_admin)):
     if p is None:
         raise HTTPException(404)
     return FileResponse(p, media_type="application/gzip", filename=name)
+
+
+# ---------------------------------------------------------------- BGG collection sync
+
+
+@router.get("/admin/collection")
+def collection_page(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from .. import bgg
+
+    return render(request, "admin/collection.html", {"bgg_enabled": bgg.enabled(),
+                                                     "username": collection.get_username(db)})
+
+
+@router.post("/admin/collection", dependencies=[Depends(verify_csrf)])
+async def collection_preview(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from .. import bgg
+
+    form = await request.form()
+    username = (form.get("username") or "").strip()[:100]
+    try:
+        items = await asyncio.to_thread(bgg.collection, username)
+    except bgg.BggError as e:
+        return render(request, "admin/collection.html", {"bgg_enabled": bgg.enabled(), "username": username,
+                                                         "error": str(e)}, 422)
+    collection.set_username(db, username)
+    db.commit()
+    if not items:
+        return render(request, "admin/collection.html", {
+            "bgg_enabled": True, "username": username,
+            "error": f"No owned board games in {username}'s BGG collection (or it's private)."}, 422)
+    return render(request, "admin/collection.html", {
+        "bgg_enabled": True, "username": username, "token": collection.stage(username, items),
+        "plan": collection.plan(db, items),
+    })
+
+
+@router.post("/admin/collection/{token}/apply", dependencies=[Depends(verify_csrf)])
+async def collection_apply(token: str, request: Request, background: BackgroundTasks,
+                           user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    staged = collection.load(token)
+    if staged is None:
+        flash(request, "That preview expired. Fetch the collection again.", "err")
+        return RedirectResponse("/admin/collection", status_code=303)
+    username, items = staged
+    form = await request.form()
+    gone = form.get("gone") or "unown"
+    counts, covers = collection.apply(db, items, add_new=form.get("add_new") == "1",
+                                      unown_gone=gone == "unown", archive_gone=gone == "archive")
+    collection.discard(token)
+    if covers and form.get("covers") == "1":
+        background.add_task(collection.download_covers, covers)
+    msg = (f"Synced {username}'s collection: {counts['added']} added, {counts['updated']} updated, "
+           f"{counts['unowned']} no longer owned")
+    if counts["archived"]:
+        msg += f" ({counts['archived']} archived)"
+    msg += "."
+    if covers and form.get("covers") == "1":
+        msg += f" Downloading {len(covers)} covers in the background."
+    flash(request, msg)
+    return RedirectResponse("/games", status_code=303)
 
 
 # ---------------------------------------------------------------- import

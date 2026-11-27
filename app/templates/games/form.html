@@ -27,7 +27,9 @@
       <select id="scoring" name="scoring">{% for k, v in SCORING_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if cur == k }}>{{ v }}</option>{% endfor %}</select></div>
     <div><label>&nbsp;</label>
       {% set ur = ('uses_rounds' in f) if form else (game.uses_rounds if game else false) %}
-      <label class="check"><input type="checkbox" name="uses_rounds" {{ 'checked' if ur }}> Score by round by default</label></div>
+      <label class="check"><input type="checkbox" name="uses_rounds" {{ 'checked' if ur }}> Score by round by default</label>
+      {% set ow = ('owned' in f) if form else (game.owned if game else true) %}
+      <label class="check" style="margin-top:.4rem"><input type="checkbox" name="owned" {{ 'checked' if ow }}> On our shelf</label></div>
     <div><label for="round_label">What's a round called? <span class="hint">Round, Hand, Era, Age…</span></label>
       <input type="text" id="round_label" name="round_label" maxlength="40" placeholder="Round" value="{{ val('round_label', game.round_label if game and game.round_label else '') }}"></div>
     <div><label for="min_players">Min players</label>

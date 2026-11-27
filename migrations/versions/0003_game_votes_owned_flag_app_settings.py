@@ -59,6 +59,9 @@ def upgrade() -> None:
     with op.batch_alter_table('games', schema=None) as batch_op:
         batch_op.add_column(sa.Column('owned', sa.Boolean(), nullable=False, server_default=sa.false()))
 
+
+    # Games already in the app are assumed to be on the shelf; BGG collection sync can correct that.
+    op.execute(sa.text("UPDATE games SET owned = :t WHERE archived = :f").bindparams(t=True, f=False))
     # ### end Alembic commands ###
 
 

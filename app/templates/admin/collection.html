@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}BGG collection · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Sync with your BGG collection</h1><p class="muted"><a href="/admin">← Admin</a></p></div></div>
+{% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+
+{% if not bgg_enabled %}
+<div class="card"><p>Set <code>BGG_TOKEN</code> to sync with BoardGameGeek. Register an app at <a href="https://boardgamegeek.com/applications" target="_blank" rel="noopener noreferrer">boardgamegeek.com/applications</a>.</p></div>
+{% elif token %}
+<form class="card stack" method="post" action="/admin/collection/{{ token }}/apply">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <h2>Preview: {{ username }} owns {{ plan.total }} board games</h2>
+  <p class="small muted">Nothing has changed yet. Existing games only get <em>blank</em> fields filled in; anything you've edited stays as is.</p>
+
+  <div>
+    <label class="check"><input type="checkbox" name="add_new" value="1" {{ 'checked' if plan.new_games }} {{ 'disabled' if not plan.new_games }}> <span>Add <strong>{{ plan.new_games|length }}</strong> new game{{ 's' if plan.new_games|length != 1 }}</span></label>
+    {% if plan.new_games %}<div class="small muted" style="margin:.3rem 0 0 1.6rem">{% for it in plan.new_games[:40] %}{{ it.name }}{% if it.year %} ({{ it.year }}){% endif %}{{ ", " if not loop.last }}{% endfor %}{% if plan.new_games|length > 40 %}, and {{ plan.new_games|length - 40 }} more{% endif %}</div>
+    <div class="small muted" style="margin:.3rem 0 0 1.6rem">New games start as "highest score wins". Change co-op or win/loss games afterwards.</div>{% endif %}
+  </div>
+
+  <div><strong>{{ plan.updates|length }}</strong> existing game{{ 's' if plan.updates|length != 1 }} get updates{% if plan.same %}, {{ plan.same }} already up to date{% endif %}.
+    {% if plan.updates %}<div class="small muted" style="margin-top:.3rem">{% for u in plan.updates[:30] %}{{ u.game.name }} <span class="tag">{{ u.changes|join(", ")|replace("_", " ") }}</span>{{ " " }}{% endfor %}{% if plan.updates|length > 30 %}…{% endif %}</div>{% endif %}
+  </div>
+
+  {% if plan.gone %}
+  <fieldset class="stack" style="border:1px solid var(--border);border-radius:10px;padding:.75rem">
+    <legend class="small" style="padding:0 .3rem"><strong>{{ plan.gone|length }}</strong> game{{ 's' if plan.gone|length != 1 }} marked as ours but not in the BGG collection</legend>
+    <div class="small muted">{% for g in plan.gone[:30] %}{{ g.name }}{{ ", " if not loop.last }}{% endfor %}</div>
+    <label class="check"><input type="radio" name="gone" value="unown" checked> <span>Mark as not on our shelf (history kept)</span></label>
+    <label class="check"><input type="radio" name="gone" value="archive"> <span>Also archive them (hidden from the play form)</span></label>
+    <label class="check"><input type="radio" name="gone" value="keep"> <span>Leave them alone</span></label>
+  </fieldset>
+  {% endif %}
+
+  <label class="check"><input type="checkbox" name="covers" value="1" checked> <span>Download cover art for games that don't have one (runs in the background)</span></label>
+  <div class="row"><button class="btn primary">Apply</button><a class="btn ghost" href="/admin/collection">Cancel</a></div>
+</form>
+{% else %}
+<form class="card stack" method="post" action="/admin/collection">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <p class="small muted">Pulls the board games marked <strong>Own</strong> in a BoardGameGeek collection (expansions skipped). You'll see a preview before anything changes. The first fetch can take up to a minute while BGG prepares the collection.</p>
+  <div><label for="username">BGG username</label><input type="text" id="username" name="username" value="{{ username }}" required maxlength="100" style="max-width:320px"></div>
+  <div><button class="btn primary" onclick="this.textContent='Fetching from BoardGameGeek…'">Fetch &amp; preview</button></div>
+</form>
+{% endif %}
+{% endblock %}

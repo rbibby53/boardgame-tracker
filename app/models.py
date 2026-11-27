@@ -80,7 +80,7 @@ class Game(Base):
     year: Mapped[int | None] = mapped_column(Integer)
     play_time_min: Mapped[int | None] = mapped_column(Integer)  # box play time, used by the picker
     has_cover: Mapped[bool] = mapped_column(Boolean, default=False)  # cover image in DATA_DIR/covers
-    owned: Mapped[bool] = mapped_column(Boolean, default=False)  # on our shelf (manual or BGG collection)
+    owned: Mapped[bool] = mapped_column(Boolean, default=True)  # on our shelf (manual or BGG collection)
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
