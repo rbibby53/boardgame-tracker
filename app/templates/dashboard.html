@@ -13,6 +13,14 @@
   <div class="card stat"><div class="v">{{ totals.players }}</div><div class="l">Players</div></div>
 </div>
 
+{% if last_night %}
+<a class="card champion" href="/nights/{{ last_night.day.isoformat() }}" style="margin-bottom:1rem;color:inherit;text-decoration:none">
+  <div><div class="small muted">Last game night · {{ last_night.day.strftime("%A, %b %-d") }}</div>
+    <strong>{{ last_night.plays|length }} game{{ 's' if last_night.plays|length != 1 }}</strong>
+    {% if last_night.champions %} · 👑 {{ last_night.champions|map(attribute="display_name")|join(" & ") }}{% endif %}</div>
+</a>
+{% endif %}
+
 <div class="grid two">
   <section class="card flush">
     <h2>Latest plays</h2>

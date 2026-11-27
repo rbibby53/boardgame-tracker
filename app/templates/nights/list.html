@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Game nights · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Game nights</h1><p class="muted">{{ total }} night{{ 's' if total != 1 }}. Plays before {{ settings.night_cutoff_hour }} AM count toward the night before.</p></div></div>
+<div class="card flush">
+{% if nights %}
+<ul class="plays">
+{% for n in nights %}{% set m = meta.get(n.day) %}
+  <li><a class="item" href="/nights/{{ n.day.isoformat() }}">
+    <span class="g">{{ m.title if m and m.title else n.day.strftime("%A night") }}</span>
+    <span class="d nowrap">{{ n.day.strftime("%b %-d, %Y") }}</span>
+    <span class="ppl">
+      <span>{{ n.plays|length }} game{{ 's' if n.plays|length != 1 }}: {{ n.plays|map(attribute="game.name")|unique|join(", ") }}</span>
+      {% if n.champions %}<span class="w">👑 {{ n.champions|map(attribute="display_name")|join(" & ") }}</span>{% endif %}
+    </span>
+  </a></li>
+{% endfor %}
+</ul>
+{% else %}<div class="empty">No plays yet.</div>{% endif %}
+</div>
+{% if pages > 1 %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn sm" href="?page={{ page - 1 }}">← Newer</a>{% endif %}
+  <span class="muted small">Page {{ page }} of {{ pages }}</span>
+  {% if page < pages %}<a class="btn sm" href="?page={{ page + 1 }}">Older →</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -22,6 +22,7 @@ def load_plays(db: Session, *, game_id: int | None = None, player_id: int | None
             selectinload(Play.game),
             selectinload(Play.seats).selectinload(PlaySeat.player),
             selectinload(Play.category_scores),
+            selectinload(Play.photos),
         )
         .order_by(Play.played_at, Play.id)
     )

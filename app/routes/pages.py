@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import ratings, stats
+from .. import nights, ratings, stats
 from ..auth import current_user
 from ..db import get_db
 from ..config import get_settings
@@ -29,6 +29,7 @@ def dashboard(request: Request, user: Player = Depends(current_user), db: Sessio
     board_rating = sorted(rated, key=lambda p: -rt.overall_for(p.id))[:10]
     return render(request, "dashboard.html", {
         "rt": rt,
+        "last_night": (nights.group(all_plays) or [None])[0],
         "board_rating": board_rating,
         "latest": list(reversed(all_plays[-8:])),
         "board_all": stats.leaderboard(all_plays)[:10],

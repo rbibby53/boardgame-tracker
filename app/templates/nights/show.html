@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import who, play_list %}
+{% block title %}{{ meta.title if meta and meta.title else night.day.strftime("%b %-d") ~ " game night" }} · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ meta.title if meta and meta.title else night.day.strftime("%A night") }}</h1>
+    <p class="muted">{{ night.day.strftime("%A, %B %-d, %Y") }} · {{ night.plays|length }} game{{ 's' if night.plays|length != 1 }}{% if night.minutes %} · {{ night.minutes // 60 }}h {{ night.minutes % 60 }}m played{% endif %}</p>
+  </div>
+  <div class="row">
+    {% if older %}<a class="btn sm" href="/nights/{{ older.isoformat() }}">← Earlier</a>{% endif %}
+    {% if newer %}<a class="btn sm" href="/nights/{{ newer.isoformat() }}">Later →</a>{% endif %}
+  </div>
+</div>
+
+{% if night.champions %}
+<div class="card champion" style="margin-bottom:1rem">
+  <div class="row">{% for c in night.champions %}{{ who(c, size="lg") }}{% endfor %}</div>
+  <div><strong>👑 Champion{{ 's' if night.champions|length > 1 }} of the night</strong>
+    {% set sweeper = night.swept_by() %}{% if sweeper %}<span class="tag win">Clean sweep: won every game</span>{% endif %}</div>
+</div>
+{% endif %}
+
+<div class="grid two">
+  <section class="card flush">
+    <h2>Standings</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Played</th></tr></thead>
+      <tbody>{% for r in night.rows %}
+        <tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% set cw, ct = night.coop %}{% if ct %}<p class="small muted" style="padding:0 1rem">Co-op: the team won {{ cw }} of {{ ct }}.</p>{% endif %}
+  </section>
+  <section class="card flush">
+    <h2>Games played</h2>
+    {{ play_list(night.plays|reverse|list) }}
+  </section>
+</div>
+
+{% if photos %}
+<section class="card" style="margin-top:1rem">
+  <h2>Photos</h2>
+  <div class="photo-grid">{% for p, ph in photos %}<a href="/photos/{{ ph.key }}" target="_blank" rel="noopener"><img src="/photos/{{ ph.key }}/thumb" alt="{{ p.game.name }}" loading="lazy"></a>{% endfor %}</div>
+</section>
+{% endif %}
+
+<section class="card" style="margin-top:1rem">
+  <h2>About this night</h2>
+  <form method="post" action="/nights/{{ night.day.isoformat() }}" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label for="title">Title <span class="hint">optional, e.g. "Thanksgiving at Mom's"</span></label>
+      <input type="text" id="title" name="title" maxlength="150" value="{{ meta.title if meta and meta.title else '' }}"></div>
+    <div><label for="notes">Notes</label><textarea id="notes" name="notes">{{ meta.notes if meta and meta.notes else '' }}</textarea></div>
+    <div><button class="btn">Save</button></div>
+  </form>
+</section>
+{% endblock %}

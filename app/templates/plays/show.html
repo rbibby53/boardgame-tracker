@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1><a href="/games/{{ play.game.id }}" style="color:inherit">{{ play.game.name }}</a></h1>
-    <p class="muted">{{ play.played_at|dt("%A, %B %-d, %Y · %-I:%M %p") }}</p>
+    <p class="muted">{{ play.played_at|dt("%A, %B %-d, %Y · %-I:%M %p") }} · <a href="{{ play.played_at|night }}">game night</a></p>
   </div>
   {% if can_edit %}
   <div class="row">

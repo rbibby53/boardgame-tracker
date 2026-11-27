@@ -49,12 +49,18 @@ def utc_to_local(dt: datetime | None, fmt: str = "%b %-d, %Y %-I:%M %p") -> str:
     return dt.replace(tzinfo=timezone.utc).astimezone(tz).strftime(fmt)
 
 
+def night_link(dt: datetime | None) -> str:
+    from .nights import night_of
+
+    return f"/nights/{night_of(dt).isoformat()}" if dt else "/nights"
+
+
 def pct(n: float | None) -> str:
     return "—" if n is None else f"{n * 100:.0f}%"
 
 
 templates.env.globals.update(SCORING_TYPES=SCORING_TYPES, V=ASSET_VERSION)
-templates.env.filters.update(score=fmt_score, dt=local_dt, utc=utc_to_local, pct=pct)
+templates.env.filters.update(score=fmt_score, dt=local_dt, utc=utc_to_local, pct=pct, night=night_link)
 
 
 def render(request: Request, name: str, ctx: dict | None = None, status_code: int = 200):
