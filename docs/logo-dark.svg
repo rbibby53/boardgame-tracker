@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="120" viewBox="0 0 520 120" role="img" aria-label="Game Night">
+  <g transform="translate(8 12) rotate(-8 48 48)">
+    <rect x="4" y="4" width="88" height="88" rx="20" fill="#2f6fdb"/>
+    <g fill="#fff"><circle cx="28" cy="28" r="8.5"/><circle cx="68" cy="28" r="8.5"/><circle cx="48" cy="48" r="8.5"/><circle cx="28" cy="68" r="8.5"/><circle cx="68" cy="68" r="8.5"/></g>
+  </g>
+  <text x="122" y="66" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="50" font-weight="800" fill="#ecebe6" letter-spacing="-1">Game Night</text>
+  <text x="124" y="98" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="19" fill="#9d9a91">self-hosted board game score tracker</text>
+</svg>
