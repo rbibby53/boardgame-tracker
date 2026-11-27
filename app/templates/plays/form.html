@@ -13,7 +13,7 @@
   <section class="card">
     <div class="fields">
       <div>
-        <label for="game_id">Game <a class="hint" href="/games/new?next=log">+ new game</a></label>
+        <label for="game_id">Game {% if can('manage_games') %}<a class="hint" href="/games/new?next=log">+ new game</a>{% endif %}</label>
         <select name="game_id" id="game_id" required>
           <option value="">Choose a game…</option>
           {% for g in games %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
@@ -43,7 +43,7 @@
     <div class="row" style="margin-bottom:.6rem"><h2 style="margin:0">Who played</h2><span class="spacer"></span>
       <button type="button" class="btn sm" id="sameAsLast" hidden>Same players as last time</button></div>
     <div class="chips" id="playerChips"></div>
-    <div class="row" style="margin-top:.6rem">
+    <div class="row" style="margin-top:.6rem" {{ '' if can('manage_guests') else 'hidden' }}>
       <input type="text" id="guestName" placeholder="Add a guest player…" style="max-width:260px" maxlength="150">
       <button type="button" class="btn sm" id="addGuest">Add</button>
     </div>

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import asyncio
 
 from .. import bgg, media, ratings, stats
-from ..auth import current_user, require_admin, verify_csrf
+from ..auth import current_user, require, verify_csrf
 from ..db import get_db
 from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player
 from ..templating import flash, render
@@ -16,7 +16,7 @@ api = APIRouter(prefix="/api/bgg")
 
 
 @api.get("/search")
-async def bgg_search(q: str = "", user: Player = Depends(current_user)):
+async def bgg_search(q: str = "", user: Player = Depends(require("manage_games"))):
     try:
         return {"results": await asyncio.to_thread(bgg.search, q[:100])}
     except bgg.BggError as e:
@@ -24,7 +24,7 @@ async def bgg_search(q: str = "", user: Player = Depends(current_user)):
 
 
 @api.get("/thing/{bgg_id}")
-async def bgg_thing(bgg_id: int, user: Player = Depends(current_user)):
+async def bgg_thing(bgg_id: int, user: Player = Depends(require("manage_games"))):
     try:
         return await asyncio.to_thread(bgg.thing, bgg_id)
     except bgg.BggError as e:
@@ -133,12 +133,12 @@ def list_games(request: Request, archived: bool = False, shelf: bool = False, us
 
 
 @router.get("/new")
-def new_game(request: Request, user: Player = Depends(current_user)):
+def new_game(request: Request, user: Player = Depends(require("manage_games"))):
     return render(request, "games/form.html", {"bgg_enabled": bgg.enabled(), "game": None})
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_game(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def create_game(request: Request, user: Player = Depends(require("manage_games")), db: Session = Depends(get_db)):
     game = Game()
     err = await _read_game_form(request, game, db)
     if not err and db.scalar(select(Game).where(func.lower(Game.name) == game.name.lower())):
@@ -177,7 +177,7 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
 
 
 @router.get("/{game_id}/edit")
-def edit_game(game_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+def edit_game(game_id: int, request: Request, user: Player = Depends(require("manage_games")), db: Session = Depends(get_db)):
     game = db.get(Game, game_id)
     if game is None:
         raise HTTPException(404)
@@ -185,7 +185,7 @@ def edit_game(game_id: int, request: Request, user: Player = Depends(current_use
 
 
 @router.post("/{game_id}", dependencies=[Depends(verify_csrf)])
-async def update_game(game_id: int, request: Request, user: Player = Depends(current_user),
+async def update_game(game_id: int, request: Request, user: Player = Depends(require("manage_games")),
                       db: Session = Depends(get_db)):
     game = db.get(Game, game_id)
     if game is None:
@@ -206,7 +206,8 @@ async def update_game(game_id: int, request: Request, user: Player = Depends(cur
 
 
 @router.post("/{game_id}/archive", dependencies=[Depends(verify_csrf)])
-def archive_game(game_id: int, request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+def archive_game(game_id: int, request: Request, user: Player = Depends(require("archive_games")),
+                 db: Session = Depends(get_db)):
     game = db.get(Game, game_id)
     if game is None:
         raise HTTPException(404)
@@ -217,7 +218,8 @@ def archive_game(game_id: int, request: Request, user: Player = Depends(require_
 
 
 @router.post("/{game_id}/delete", dependencies=[Depends(verify_csrf)])
-def delete_game(game_id: int, request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+def delete_game(game_id: int, request: Request, user: Player = Depends(require("archive_games")),
+                db: Session = Depends(get_db)):
     game = db.get(Game, game_id)
     if game is None:
         raise HTTPException(404)

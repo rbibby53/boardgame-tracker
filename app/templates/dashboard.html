@@ -4,7 +4,7 @@
 <div class="page-head">
   <div><h1>Hi, {{ user.display_name.split()[0] }}</h1>
   <p class="muted">You've played {{ totals.my_plays }} time{{ 's' if totals.my_plays != 1 }} and won {{ totals.my_wins }}.</p></div>
-  <a class="btn primary" href="/plays/new">+ Log a play</a>
+  {% if can('log_plays') %}<a class="btn primary" href="/plays/new">+ Log a play</a>{% endif %}
 </div>
 
 <div class="grid stats" style="margin-bottom:1rem">

@@ -30,10 +30,10 @@
       <a href="/games" class="{{ 'on' if path.startswith('/games') }}">Games</a>
       <a href="/players" class="{{ 'on' if path.startswith('/players') }}">Players</a>
       <a href="/pick" class="{{ 'on' if path.startswith('/pick') }}">Pick</a>
-      {% if user.is_admin %}<a href="/admin" class="{{ 'on' if path.startswith('/admin') }}">Admin</a>{% endif %}
+      {% if can('admin') %}<a href="/admin" class="{{ 'on' if path.startswith('/admin') }}">Admin</a>{% endif %}
     </nav>
     <div class="me">
-      <a class="btn primary sm" href="/plays/new">+ Log play</a>
+      {% if can('log_plays') %}<a class="btn primary sm" href="/plays/new">+ Log play</a>{% endif %}
       <a href="/players/{{ user.id }}" title="{{ user.display_name }}">{{ avatar(user) }}</a>
       <form method="post" action="/logout" onsubmit="GN.forget()"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out">Sign out</button></form>
     </div>

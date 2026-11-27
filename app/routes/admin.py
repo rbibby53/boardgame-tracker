@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .. import backup, collection, importer, notify, ratings, stats
 from ..authentik import SyncError, run_sync
-from ..auth import current_user, require_admin, verify_csrf
+from ..auth import require, require_admin, verify_csrf
 from ..config import get_settings
 from ..db import SessionLocal, get_db
 from ..models import Play, PlaySeat, Player, Round, RoundScore, SyncLog
@@ -116,6 +116,75 @@ def merge_guest(request: Request, guest_id: int = Form(...), target_id: int = Fo
     ratings.invalidate()
     flash(request, f"Merged {guest.display_name} into {target.display_name}.")
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------- roles & permissions
+
+
+def _admin_count(db: Session, cfg: dict) -> int:
+    from .. import permissions as P
+
+    # Guests can't be given a role and never have is_admin, so counting everyone active is safe.
+    return sum(1 for p in db.scalars(select(Player).where(Player.is_active.is_(True))).all()
+               if P.role_of(p, cfg) == "admin")
+
+
+@router.get("/admin/permissions")
+def permissions_page(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from .. import permissions as P
+
+    cfg = P.load(db)
+    people = db.scalars(select(Player).where(Player.source == "sso").order_by(Player.is_active.desc(),
+                                                                            Player.display_name)).all()
+    known_groups = sorted({g for p in people for g in P.groups_of(p)} | set(cfg["group_roles"]))
+    return render(request, "admin/permissions.html", {
+        "cfg": cfg, "PERMS": P.PERMS, "ROLES": P.ROLES, "LABELS": P.ROLE_LABELS,
+        "people": [(p, *P.role_source(p, cfg), P.groups_of(p)) for p in people],
+        "known_groups": known_groups, "admin_group": get_settings().oidc_admin_group,
+    })
+
+
+@router.post("/admin/permissions", dependencies=[Depends(verify_csrf)])
+async def permissions_save(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from .. import permissions as P
+
+    form = await request.form()
+    matrix = {r: [p for p in P.PERMS if form.get(f"perm__{r}__{p}") == "1"] for r in ("viewer", "player", "manager")}
+    groups = {}
+    for i in range(50):
+        name, role = (form.get(f"group_{i}") or "").strip(), form.get(f"grouprole_{i}") or ""
+        if name and role in P.ROLES:
+            groups[name] = role
+    new = P._clean({"matrix": matrix, "group_roles": groups, "default_role": form.get("default_role")})
+    if _admin_count(db, new) == 0:
+        flash(request, "That would leave nobody with admin. Keep at least one admin (OIDC_ADMIN_GROUP members "
+                       "always are).", "err")
+        return RedirectResponse("/admin/permissions", status_code=303)
+    P.save(db, new)
+    flash(request, "Permissions saved. They apply on each person's next page load.")
+    return RedirectResponse("/admin/permissions", status_code=303)
+
+
+@router.post("/admin/permissions/user/{player_id}", dependencies=[Depends(verify_csrf)])
+async def permissions_user(player_id: int, request: Request, user: Player = Depends(require_admin),
+                           db: Session = Depends(get_db)):
+    from .. import permissions as P
+
+    p = db.get(Player, player_id)
+    if p is None or p.source != "sso":
+        raise HTTPException(404)
+    role = (await request.form()).get("role") or ""
+    before = p.role_override
+    p.role_override = role if role in P.ROLES else None
+    db.flush()
+    if _admin_count(db, P.load(db)) == 0:
+        p.role_override = before
+        db.rollback()
+        flash(request, "That would leave nobody with admin.", "err")
+        return RedirectResponse("/admin/permissions#people", status_code=303)
+    db.commit()
+    flash(request, f"{p.display_name}: {P.ROLE_LABELS.get(role, 'automatic role')}.")
+    return RedirectResponse("/admin/permissions#people", status_code=303)
 
 
 # ---------------------------------------------------------------- backups
@@ -273,7 +342,7 @@ def import_cancel(token: str, request: Request, user: Player = Depends(require_a
 
 
 @router.get("/export/plays.csv")
-def export_csv(user: Player = Depends(current_user), db: Session = Depends(get_db)):
+def export_csv(user: Player = Depends(require("export")), db: Session = Depends(get_db)):
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["play_id", "played_at", "game", "location", "duration_min", "expansions", "player",
@@ -289,7 +358,7 @@ def export_csv(user: Player = Depends(current_user), db: Session = Depends(get_d
 
 
 @router.get("/export/plays.json")
-def export_json(user: Player = Depends(current_user), db: Session = Depends(get_db)):
+def export_json(user: Player = Depends(require("export")), db: Session = Depends(get_db)):
     plays = db.scalars(select(Play).options(selectinload(Play.rounds).selectinload(Round.scores))
                        .order_by(Play.played_at)).all()
     full = {p.id: p for p in stats.load_plays(db)}

@@ -5,8 +5,8 @@
 <div class="page-head">
   <div><h1>Plays</h1><p class="muted">{{ total }} logged</p></div>
   <div class="row">
-    <a class="btn sm" href="/export/plays.csv">Export CSV</a>
-    <a class="btn sm" href="/export/plays.json">Export JSON</a>
+    {% if can('export') %}<a class="btn sm" href="/export/plays.csv">Export CSV</a>
+    <a class="btn sm" href="/export/plays.json">Export JSON</a>{% endif %}
   </div>
 </div>
 <form class="filters" method="get" style="margin-bottom:1rem">

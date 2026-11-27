@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .. import media
-from ..auth import current_user, verify_csrf
+from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
 from ..db import get_db
 from ..models import Game, PlayPhoto, Player
@@ -27,10 +27,10 @@ async def _read_limited(f: UploadFile, limit: int) -> bytes:
 
 
 @router.post("/plays/{play_id}/photos", dependencies=[Depends(verify_csrf)])
-async def upload_photos(play_id: int, request: Request, user: Player = Depends(current_user),
+async def upload_photos(play_id: int, request: Request, user: Player = Depends(require("upload_photos")),
                         db: Session = Depends(get_db)):
     play = _get_play(db, play_id)
-    if not can_edit(user, play):
+    if not can_edit(request, user, play):
         raise HTTPException(403, "Only people in this play (or admins) can add photos.")
     form = await request.form(max_files=MAX_PER_UPLOAD + 1)
     files = [f for f in form.getlist("photos") if isinstance(f, UploadFile) and f.filename]
@@ -83,7 +83,7 @@ def delete_photo(key: str, request: Request, user: Player = Depends(current_user
     if ph is None:
         raise HTTPException(404)
     play = _get_play(db, ph.play_id)
-    if not (can_edit(user, play) or ph.uploaded_by_id == user.id):
+    if not (can_edit(request, user, play) or (ph.uploaded_by_id == user.id and can(request, "upload_photos"))):
         raise HTTPException(403)
     db.delete(ph)
     db.commit()
@@ -101,7 +101,7 @@ def get_cover(game_id: int, user: Player = Depends(current_user), db: Session = 
 
 
 @router.post("/games/{game_id}/cover", dependencies=[Depends(verify_csrf)])
-async def upload_cover(game_id: int, request: Request, user: Player = Depends(current_user),
+async def upload_cover(game_id: int, request: Request, user: Player = Depends(require("manage_games")),
                        db: Session = Depends(get_db)):
     game = db.get(Game, game_id)
     if game is None:

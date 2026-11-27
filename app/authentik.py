@@ -1,5 +1,6 @@
 """Pull the player roster from the Authentik API (GET /api/v3/core/users/)."""
 
+import json
 import logging
 from dataclasses import dataclass
 
@@ -122,6 +123,7 @@ def apply_users(db: Session, settings: Settings, users: list[dict]) -> SyncResul
         player.avatar_url = avatar_for(u, settings.authentik_url)
         player.is_active = True
         player.synced_at = now
+        player.groups = json.dumps(sorted(group_names(u)))
         if settings.oidc_admin_group:
             player.is_admin = settings.oidc_admin_group in group_names(u)
         elif u.get("is_superuser"):

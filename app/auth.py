@@ -1,3 +1,4 @@
+import json
 import logging
 import secrets
 from urllib.parse import urlencode
@@ -8,6 +9,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from . import permissions
 from .config import get_settings
 from .db import get_db
 from .models import Player, utcnow
@@ -47,14 +49,29 @@ def current_user(request: Request, db: Session = Depends(get_db)) -> Player:
     if player is None or not player.is_active:
         request.session.pop("player_id", None)
         raise LoginRequired()
+    cfg = permissions.load(db)
     request.state.user = player
+    request.state.role = permissions.role_of(player, cfg)
+    request.state.perms = permissions.perms_for_role(request.state.role, cfg)
     return player
 
 
-def require_admin(user: Player = Depends(current_user)) -> Player:
-    if not user.is_admin:
-        raise HTTPException(403, "Admins only")
-    return user
+def can(request: Request, perm: str) -> bool:
+    return perm in getattr(request.state, "perms", set())
+
+
+def require(perm: str):
+    """Dependency: signed in AND holding `perm`."""
+    def dep(request: Request, user: Player = Depends(current_user)) -> Player:
+        if perm not in request.state.perms:
+            label = permissions.PERMS.get(perm, "Admin")
+            raise HTTPException(403, f"Your role doesn't allow this ({label.split(';')[0].lower()}). "
+                                     "Ask an admin to change it.")
+        return user
+    return dep
+
+
+require_admin = require("admin")
 
 
 async def verify_csrf(request: Request) -> None:
@@ -94,8 +111,10 @@ def upsert_from_claims(db: Session, claims: dict) -> Player:
     player.is_active = True
     player.last_login = utcnow()
     groups = claims.get("groups")
-    if s.oidc_admin_group and isinstance(groups, list):
-        player.is_admin = s.oidc_admin_group in groups
+    if isinstance(groups, list):
+        player.groups = json.dumps(sorted({str(g) for g in groups}))
+        if s.oidc_admin_group:
+            player.is_admin = s.oidc_admin_group in groups
     db.commit()
     return player
 
