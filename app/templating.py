@@ -1,3 +1,4 @@
+import hashlib
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,19 @@ from .models import SCORING_TYPES
 from .scoring import fmt_score
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _asset_version() -> str:
+    h = hashlib.sha256()
+    for f in sorted(STATIC_DIR.rglob("*")):
+        if f.is_file():
+            h.update(f.relative_to(STATIC_DIR).as_posix().encode())
+            h.update(f.read_bytes())
+    return h.hexdigest()[:10]
+
+
+ASSET_VERSION = _asset_version()
 
 
 def csrf_token(request: Request) -> str:
@@ -39,7 +53,7 @@ def pct(n: float | None) -> str:
     return "—" if n is None else f"{n * 100:.0f}%"
 
 
-templates.env.globals.update(SCORING_TYPES=SCORING_TYPES)
+templates.env.globals.update(SCORING_TYPES=SCORING_TYPES, V=ASSET_VERSION)
 templates.env.filters.update(score=fmt_score, dt=local_dt, utc=utc_to_local, pct=pct)
 
 

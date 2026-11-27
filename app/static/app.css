@@ -39,6 +39,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
@@ -125,6 +126,8 @@ textarea { min-height: 80px; resize: vertical; }
 .flash { padding: .7rem .9rem; border-radius: 10px; margin-bottom: 1rem; font-weight: 500; }
 .flash.ok { background: var(--ok-bg); color: var(--ok-ink); }
 .flash.err { background: var(--err-bg); color: var(--err-ink); }
+.offline-badge { background: #6b5a00; color: #fff; text-align: center; font-size: .8rem; padding: .25rem; font-weight: 600; }
+.draft-bar { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 .devbar { background: #b91c1c; color: #fff; text-align: center; font-size: .8rem; padding: .2rem; font-weight: 600; }
 
 /* ---------- tables ---------- */

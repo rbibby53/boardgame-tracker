@@ -32,6 +32,42 @@
   const gameSel = $("game_id");
   if (init.game_id) gameSel.value = String(init.game_id);
 
+  // ------------------------------------------------------------ device draft (survives reloads / no signal)
+  const form = $("playForm");
+  const DRAFT_KEY = "gn-draft:" + new URL(form.action, location.href).pathname;
+  const FIELDS = ["game_id", "played_at", "location", "duration_min", "expansions", "notes"];
+  let draftTimer = null;
+  const store = {
+    get() { try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); } catch (_) { return null; } },
+    set(v) { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(v)); } catch (_) { /* full or blocked */ } },
+    clear() { try { localStorage.removeItem(DRAFT_KEY); } catch (_) { /* blocked */ } },
+  };
+  let draftReady = false;  // don't save until the initial render (or restore) is done
+  function saveDraft() {
+    if (!draftReady) return;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      const fields = Object.fromEntries(FIELDS.map((f) => [f, form.elements[f].value]));
+      store.set({ savedAt: Date.now(), fields, state });
+    }, 300);
+  }
+  form.addEventListener("input", saveDraft);
+  form.addEventListener("change", saveDraft);
+  $("draftDiscard").onclick = () => { store.clear(); location.href = location.pathname + location.search; };
+
+  function restoreDraft() {
+    const d = store.get();
+    if (!d || document.querySelector(".flash.err")) return false;
+    if (Date.now() - d.savedAt > 7 * 864e5) { store.clear(); return false; }  // stale after a week
+    for (const f of FIELDS) if (d.fields && f in d.fields) form.elements[f].value = d.fields[f];
+    Object.assign(state, d.state);
+    state.players = state.players.filter((s) => players.has(s.player_id));
+    const when = new Date(d.savedAt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    $("draftMsg").textContent = `Restored your unsaved draft from ${when}.`;
+    $("draftBar").hidden = false;
+    return true;
+  }
+
   const game = () => games.get(Number(gameSel.value)) || null;
   const scoring = () => (game() ? game().scoring : "high");
   const roundWord = () => (game() ? game().round_label : "Round");
@@ -380,6 +416,7 @@
   $("coopWon").onchange = (e) => { state.coop_won = e.target.checked; refresh(); };
 
   function refresh() {
+    saveDraft();
     const { t, w, winners } = preview();
     const sc = scoring();
     document.querySelectorAll("#roundsTable [data-total]").forEach((td) => {
@@ -474,13 +511,22 @@
       return;
     }
     $("payload").value = JSON.stringify(payload);
+    if (!navigator.onLine) {
+      e.preventDefault();
+      draftReady = true; saveDraft();
+      alert("You're offline. This play is saved on this device. Open Log a play again once you're back online and tap Save.");
+      return;
+    }
+    store.clear();
   });
 
-  if (gameSel.value && init.use_rounds === undefined && !state.rounds.length) {
+  const restored = restoreDraft();
+  if (!restored && gameSel.value && init.use_rounds === undefined && !state.rounds.length) {
     const g = game();
     if (g) state.use_rounds = g.uses_rounds;
     if (g && init.use_sheet === undefined) state.use_sheet = g.categories.some((c) => !c.archived);
     if (g && g.scoring === "winloss" && !state.use_rounds) state.winners_manual = true;
   }
   renderAll();
+  draftReady = true;
 })();

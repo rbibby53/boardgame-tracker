@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -10,7 +11,7 @@ from ..auth import current_user
 from ..db import get_db
 from ..config import get_settings
 from ..models import Game, Player
-from ..templating import render
+from ..templating import ASSET_VERSION, STATIC_DIR, render
 
 router = APIRouter()
 
@@ -49,3 +50,38 @@ def healthz(db: Session = Depends(get_db)):
     db.execute(select(1))
     return {"ok": True}
 
+
+
+_SW = (STATIC_DIR / "sw.js").read_text().replace("__ASSET_VERSION__", ASSET_VERSION)
+
+
+@router.get("/sw.js", include_in_schema=False)
+def service_worker():
+    return Response(_SW, media_type="application/javascript",
+                    headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
+
+
+@router.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    s = get_settings()
+    return JSONResponse({
+        "name": s.app_name,
+        "short_name": s.app_name[:12],
+        "start_url": "/",
+        "scope": "/",
+        "display": "standalone",
+        "background_color": "#f6f5f1",
+        "theme_color": "#2f6fdb",
+        "icons": [
+            {"src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+            {"src": "/static/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ],
+        "shortcuts": [{"name": "Log a play", "url": "/plays/new",
+                       "icons": [{"src": "/static/icons/icon-192.png", "sizes": "192x192"}]}],
+    }, media_type="application/manifest+json")
+
+
+@router.get("/offline", include_in_schema=False)
+def offline(request: Request):
+    return render(request, "offline.html")
