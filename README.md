@@ -28,7 +28,18 @@ It ships as one container, with SQLite by default (Postgres optional), no extern
   - Users removed from the group are deactivated, but their history is kept.
   - A sync that returns zero users is refused, so a bad filter can't wipe your roster.
 - **Guests** are local players without a login. When a guest later gets an account, an admin can merge the guest into it.
+- **Score sheets**: give a game its scoring categories (e.g. 7 Wonders: Military, Coins, Wonders, Science). The play form becomes a category × player grid, and the game page shows per-category averages and records.
+- **Skill ratings** (OpenSkill): accounts for who you beat, handles ties and teams, and is tracked per game and overall with rating-over-time charts.
+- **Game nights**: plays are grouped by evening, with a champion of the night, clean sweeps, notes and photos.
+- **Streaks, rivals and achievements**: hot streaks, nemesis and favorite victim, "always the bridesmaid", plus dated achievements per player.
+- **What should we play?**: filter by player count and time, sort by least recently played or fewest plays, or let it pick for you.
+- **Photos**: attach board photos to a play. Location and other metadata are stripped, and iPhone HEIC is supported.
+- **BoardGameGeek**: look up a game to auto-fill player counts, play time, year and cover art. You can also import your BGG play history.
+- **Installable app (PWA)**: add it to your phone's home screen. "Log a play" works offline and keeps a draft until you're back online.
+- **Notifications** via ntfy, Discord, or a generic webhook (e.g. Home Assistant) when a play is logged.
+- **Import** from CSV or BGG, with a dry-run preview first.
 - **Export** plays as CSV or JSON.
+- **Daily SQLite backups** with rotation.
 
 ## Quick start
 
@@ -88,6 +99,14 @@ All settings are environment variables; see [`.env.example`](.env.example).
 | `AUTHENTIK_GROUP` | — | Which users become players. |
 | `AUTHENTIK_SUB_MODE` | `hashed_user_id` | Must match the provider's subject mode (`hashed_user_id`, `user_id`, `user_uuid`, `user_username`, `user_email`, `user_upn`). |
 | `AUTHENTIK_SYNC_INTERVAL_MINUTES` | `60` | `0` disables the background sync. The **Sync now** button still works. |
+| `DATA_DIR` | `/data` | Photos, covers, backups and staged imports live here. |
+| `MAX_PHOTO_MB` | `25` | Upload limit per photo. |
+| `NIGHT_CUTOFF_HOUR` | `5` | Plays before this local hour count toward the previous evening's game night. |
+| `NTFY_URL` / `NTFY_TOKEN` | — | Full topic URL, e.g. `https://ntfy.example.com/gamenight`. The token is optional (sent as a Bearer header). |
+| `DISCORD_WEBHOOK_URL` | — | Discord channel webhook. Mentions are disabled. |
+| `NOTIFY_WEBHOOK_URL` | — | Receives a JSON POST with the play, players, scores and winners (e.g. a Home Assistant webhook trigger). |
+| `BGG_TOKEN` | — | BoardGameGeek API token. BGG requires a registered application for API access: <https://boardgamegeek.com/applications>. |
+| `BACKUP_HOUR` / `BACKUP_KEEP` | `3` / `14` | Daily SQLite backup time (local) and how many to keep. `BACKUP_KEEP=0` disables the schedule. |
 | `DEV_MODE` | `false` | Bypasses SSO with a user picker. Local testing only; never expose it. |
 
 ## Who can do what
@@ -100,7 +119,33 @@ All settings are environment variables; see [`.env.example`](.env.example).
 
 ## Backups
 
-With SQLite, back up `./data/` (the database runs in WAL mode). You can copy it while the app runs with `sqlite3 data/boardgames.db ".backup backup.db"`. The CSV and JSON exports are a human-readable backup as well.
+With SQLite, the app writes a gzipped, integrity-checked snapshot to `data/backups/` every night. It keeps the newest `BACKUP_KEEP`, and you can trigger or download one from **Admin → Backups**.
+
+Back up the whole `./data/` folder off the box: photos and covers live there too. To restore, stop the container and run `gunzip -c data/backups/boardgames-<stamp>.db.gz > data/boardgames.db`. Then delete any `boardgames.db-wal` and `-shm` files and start the container again.
+
+With Postgres, schedule `pg_dump` yourself. The CSV and JSON exports are a human-readable backup either way.
+
+## Ratings
+
+Ratings use [OpenSkill](https://github.com/vivekjoshy/openskill.py) (Plackett–Luce model), recomputed from full history, so editing an old play fixes everything after it.
+
+- **Displayed number:** `1000 + 40 × (μ − 3σ)`. Everyone starts at 1000.
+- **Provisional:** a "?" marks fewer than 5 rated plays.
+- **What counts:** co-op plays and plays where everyone tied are not rated.
+- **Teams:** players with the same team name move together.
+
+## Importing
+
+Imports are under **Admin → Import plays**:
+
+- **CSV:** this app's own export, or a spreadsheet with `played_at` (or `date`), `game` and `player` columns, plus optional `score`, `winner`, `team`, `location`, `duration_min`, `notes` and `play_id`.
+- **BGG plays XML file**, or a **BGG username** (needs `BGG_TOKEN`).
+
+You always get a preview before anything is written. Players are matched by username, then by name, and unknown people become guests. Duplicates (same day, game and players) are skipped, so re-running an import is safe.
+
+## Installing on your phone
+
+Open the site over HTTPS, then use **Share → Add to Home Screen** (iOS) or **Install app** (Android/Chrome). "Log a play" is cached for offline use. If you lose signal mid-game, the play is kept as a draft on the phone. Open "Log a play" again once you're back online and tap Save.
 
 ## Development
 
@@ -117,4 +162,4 @@ Schema changes go through Alembic. Migrations run automatically at startup.
 .venv/bin/alembic revision --autogenerate -m "describe change"
 ```
 
-**Stack:** FastAPI, SQLAlchemy 2, Alembic, Authlib, Jinja templates, a small amount of vanilla JS, and Chart.js (vendored in `app/static/vendor`).
+**Stack:** FastAPI, SQLAlchemy 2, Alembic, Authlib, OpenSkill, Pillow (+ pillow-heif), Jinja templates, a small amount of vanilla JS, and Chart.js (vendored in `app/static/vendor`).

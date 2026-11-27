@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Offline · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="login-wrap"><div class="card login-card stack">
+  <h1>You're offline</h1>
+  <p class="muted">This page needs a connection. You can still <a href="/plays/new">log a play</a>; it saves as a draft on this device until you're back online.</p>
+  <button class="btn" onclick="location.reload()">Try again</button>
+</div></div>
+{% endblock %}

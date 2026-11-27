@@ -14,7 +14,10 @@ os.environ.update({
     "AUTHENTIK_GROUP": "Game Night",
     "OIDC_ADMIN_GROUP": "Game Admins",
     "AUTHENTIK_SYNC_INTERVAL_MINUTES": "0",
+    "DATA_DIR": f"{_tmp}/data",
+    "BACKUP_HOUR": "3",
 })
+os.makedirs(f"{_tmp}/data", exist_ok=True)
 
 from fastapi.testclient import TestClient  # noqa: E402
 

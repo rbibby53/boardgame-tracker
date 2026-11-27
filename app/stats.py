@@ -21,8 +21,10 @@ def load_plays(db: Session, *, game_id: int | None = None, player_id: int | None
         .options(
             selectinload(Play.game),
             selectinload(Play.seats).selectinload(PlaySeat.player),
+            selectinload(Play.category_scores),
+            selectinload(Play.photos),
         )
-        .order_by(Play.played_at)
+        .order_by(Play.played_at, Play.id)
     )
     if game_id is not None:
         q = q.where(Play.game_id == game_id)
@@ -176,3 +178,35 @@ def most_played(plays: list[Play], limit: int = 6) -> list[tuple[Game, int]]:
     for p in plays:
         counts.setdefault(p.game_id, [p.game, 0])[1] += 1
     return sorted(((g, n) for g, n in counts.values()), key=lambda t: -t[1])[:limit]
+
+
+def category_stats(game: Game, plays: list[Play]) -> dict | None:
+    """Per score-sheet line: each player's average, and the single best entry."""
+    cats = {c.id: c for c in game.categories}
+    if not cats:
+        return None
+    sums: dict[tuple[int, int], list[float]] = {}
+    best: dict[int, tuple[float, int, int]] = {}  # cat -> (value, player_id, play_id)
+    players: dict[int, Player] = {}
+    for play in plays:
+        seat_players = {s.player_id: s.player for s in play.seats}
+        for cs in play.category_scores:
+            if cs.category_id not in cats:
+                continue
+            players[cs.player_id] = seat_players.get(cs.player_id)
+            sums.setdefault((cs.category_id, cs.player_id), []).append(cs.score)
+            b = best.get(cs.category_id)
+            better = b is None or (cs.score < b[0] if game.scoring == "low" else cs.score > b[0])
+            if better:
+                best[cs.category_id] = (cs.score, cs.player_id, play.id)
+    if not sums:
+        return None
+    used = [c for c in game.categories if any(k[0] == c.id for k in sums)]
+    plist = sorted((p for p in players.values() if p), key=lambda p: p.display_name)
+    rows = []
+    for c in used:
+        avgs = {p.id: round(sum(v) / len(v), 1) for p in plist if (v := sums.get((c.id, p.id)))}
+        b = best.get(c.id)
+        rows.append({"cat": c, "avgs": avgs,
+                     "best": (b[0], players.get(b[1]), b[2]) if b else None})
+    return {"players": plist, "rows": rows}

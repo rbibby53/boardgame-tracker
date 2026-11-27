@@ -1,10 +1,21 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit " ~ game.name if game else "Add game" }} · {{ settings.app_name }}{% endblock %}
+{% block title %}{{ "Edit " ~ game.name if game else "Add game" }} · {{ settings.app_name }}{% if bgg_enabled %}<script src="/static/game-form.js?v={{ V }}" defer></script>{% endif %}
+{% endblock %}
 {% set f = form if form else {} %}
 {% macro val(name, default="") -%}{{ f[name] if name in f else default }}{%- endmacro %}
 {% block content %}
 <div class="page-head"><h1>{{ "Edit " ~ game.name if game else "Add a game" }}</h1></div>
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{% if bgg_enabled %}
+<section class="card" style="margin-bottom:1rem" id="bggBox">
+  <label for="bggQuery">Look up on BoardGameGeek <span class="hint">fills in players, play time, year and cover</span></label>
+  <div class="row"><input type="search" id="bggQuery" placeholder="Game name…" style="flex:1;min-width:180px" autocomplete="off">
+    <button type="button" class="btn sm" id="bggGo">Search</button></div>
+  <div id="bggStatus" class="hint" style="margin-top:.4rem"></div>
+  <ul id="bggResults" class="bgg-results"></ul>
+  <div class="hint" style="margin-top:.4rem">Data from <a href="https://boardgamegeek.com" target="_blank" rel="noopener noreferrer">BoardGameGeek</a>.</div>
+</section>
+{% endif %}
 <form method="post" action="{{ '/games/' ~ game.id if game else '/games' }}" class="card">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="next" value="{{ request.query_params.get('next', '') }}">
@@ -23,14 +34,34 @@
       <input type="number" id="min_players" name="min_players" min="1" value="{{ val('min_players', game.min_players if game and game.min_players else '') }}"></div>
     <div><label for="max_players">Max players</label>
       <input type="number" id="max_players" name="max_players" min="1" value="{{ val('max_players', game.max_players if game and game.max_players else '') }}"></div>
+    <div><label for="play_time_min">Play time (minutes) <span class="hint">from the box; used by the picker</span></label>
+      <input type="number" id="play_time_min" name="play_time_min" min="1" value="{{ val('play_time_min', game.play_time_min if game and game.play_time_min else '') }}"></div>
+    <div><label for="year">Year published</label>
+      <input type="number" id="year" name="year" min="1" max="3000" value="{{ val('year', game.year if game and game.year else '') }}"></div>
     <div><label for="bgg_id">BoardGameGeek ID <span class="hint">optional</span></label>
       <input type="number" id="bgg_id" name="bgg_id" min="1" value="{{ val('bgg_id', game.bgg_id if game and game.bgg_id else '') }}"></div>
+    <div class="wide"><label for="categories">Score sheet <span class="hint">one scoring category per line, e.g. Military / Coins / Wonders / Science. Leave empty for a single score.</span></label>
+      {% set cats = (game.active_categories|map(attribute="name")|join("\n")) if game else "" %}
+      <textarea id="categories" name="categories" rows="5" placeholder="Military&#10;Coins&#10;Wonders&#10;Science">{{ val('categories', cats) }}</textarea>
+      {% if game and game.categories|selectattr("archived")|list %}<div class="hint">Removed lines that have saved scores are kept on old plays.</div>{% endif %}</div>
     <div class="wide"><label for="notes">Notes <span class="hint">house rules, setup reminders</span></label>
       <textarea id="notes" name="notes">{{ val('notes', game.notes if game and game.notes else '') }}</textarea></div>
   </div>
+  {% if bgg_enabled %}
+  <label class="check" style="margin-top:.75rem"><input type="checkbox" name="bgg_cover" value="1" id="bggCover"> <span>Use the BoardGameGeek cover image</span></label>
+  {% endif %}
   <div class="form-actions">
     <a class="btn ghost" href="{{ '/games/' ~ game.id if game else '/games' }}">Cancel</a>
     <button class="btn primary">{{ "Save" if game else "Add game" }}</button>
   </div>
 </form>
+{% if game %}
+<form method="post" action="/games/{{ game.id }}/cover" enctype="multipart/form-data" class="card row" style="margin-top:1rem">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
+  <div class="stack" style="flex:1"><label for="cover" style="margin:0">Cover image</label>
+    <div class="row"><input type="file" id="cover" name="cover" accept="image/*"><button class="btn sm">Upload</button>
+    {% if game.has_cover %}<button class="btn sm ghost" name="remove" value="1">Remove</button>{% endif %}</div></div>
+</form>
+{% endif %}
 {% endblock %}

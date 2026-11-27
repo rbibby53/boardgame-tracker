@@ -41,8 +41,35 @@ class Settings(BaseSettings):
     authentik_sync_interval_minutes: int = 60
     authentik_verify_tls: bool = True
 
+    # Files: photos, game covers and backups live under here
+    data_dir: str = "/data"
+    max_photo_mb: int = 25
+
+    # Plays before this local hour count toward the previous evening's game night
+    night_cutoff_hour: int = 5
+
+    # Notifications when a play is logged (all optional)
+    ntfy_url: str = ""  # full topic URL, e.g. https://ntfy.example.com/gamenight
+    ntfy_token: str = ""
+    discord_webhook_url: str = ""
+    notify_webhook_url: str = ""  # generic JSON POST, e.g. a Home Assistant webhook
+
+    # BoardGameGeek lookup (register an app at https://boardgamegeek.com/applications)
+    bgg_token: str = ""
+
+    # Backups (SQLite only): daily at this local hour, keep this many
+    backup_hour: int = 3
+    backup_keep: int = 14
+
     # Local development only: bypasses SSO with a user picker.
     dev_mode: bool = False
+
+    @field_validator("night_cutoff_hour", "backup_hour")
+    @classmethod
+    def check_hour(cls, v: int) -> int:
+        if not 0 <= v <= 23:
+            raise ValueError("hour settings must be 0-23")
+        return v
 
     @field_validator("base_url", "authentik_url")
     @classmethod
@@ -89,6 +116,14 @@ class Settings(BaseSettings):
     @property
     def secure_cookies(self) -> bool:
         return self.base_url.startswith("https://")
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.database_url.startswith("sqlite")
+
+    @property
+    def notify_enabled(self) -> bool:
+        return bool(self.ntfy_url or self.discord_webhook_url or self.notify_webhook_url)
 
     @property
     def sync_enabled(self) -> bool:

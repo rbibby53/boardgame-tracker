@@ -13,6 +13,14 @@
   <div class="card stat"><div class="v">{{ totals.players }}</div><div class="l">Players</div></div>
 </div>
 
+{% if last_night %}
+<a class="card champion" href="/nights/{{ last_night.day.isoformat() }}" style="margin-bottom:1rem;color:inherit;text-decoration:none">
+  <div><div class="small muted">Last game night · {{ last_night.day.strftime("%A, %b %-d") }}</div>
+    <strong>{{ last_night.plays|length }} game{{ 's' if last_night.plays|length != 1 }}</strong>
+    {% if last_night.champions %} · 👑 {{ last_night.champions|map(attribute="display_name")|join(" & ") }}{% endif %}</div>
+</a>
+{% endif %}
+
 <div class="grid two">
   <section class="card flush">
     <h2>Latest plays</h2>
@@ -25,6 +33,7 @@
       <div class="seg" role="tablist">
         <label><input type="radio" name="lb" value="recent" checked onchange="GN.tab('lb', this.value)">90 days</label>
         <label><input type="radio" name="lb" value="all" onchange="GN.tab('lb', this.value)">All time</label>
+        <label><input type="radio" name="lb" value="rating" onchange="GN.tab('lb', this.value)">Rating</label>
       </div>
     </div>
     {% for key, board in [("recent", board_recent), ("all", board_all)] %}
@@ -41,9 +50,35 @@
       {% else %}<div class="empty">Nothing here yet.</div>{% endif %}
     </div>
     {% endfor %}
-    <p class="small muted" style="padding:0 1rem">Competitive games only. Co-op results show on each game's page.</p>
+    <div class="table-wrap" data-tab="lb" data-key="rating" hidden>
+      {% if board_rating %}
+      <table>
+        <thead><tr><th></th><th>Player</th><th class="num">Rating</th><th class="num">Rated plays</th></tr></thead>
+        <tbody>
+        {% for p in board_rating %}
+          <tr><td class="rank">{{ loop.index }}</td><td>{{ who(p) }}</td>
+            <td class="num">{{ rt.overall_for(p.id) }}{% if rt.provisional(p.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>
+            <td class="num">{{ rt.rated_plays.get(p.id, 0) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<div class="empty">Nothing here yet.</div>{% endif %}
+    </div>
+    <p class="small muted" style="padding:0 1rem">Competitive games only. Co-op results show on each game's page. Rating is an OpenSkill skill estimate that weighs who you beat; everyone starts at 1000.</p>
   </section>
 </div>
+
+{% if awards %}
+<section class="card" style="margin-top:1rem">
+  <h2>Awards</h2>
+  <div class="badges">{% for a in awards %}
+    {% if a.player %}<a class="badge" href="/players/{{ a.player.id }}">{% elif a.link %}<a class="badge" href="{{ a.link }}">{% else %}<div class="badge">{% endif %}
+      <span class="e">{{ a.emoji }}</span><div><div class="small muted">{{ a.title }}</div><strong>{{ a.player.display_name if a.player else "" }}</strong>
+      <div class="small muted">{{ a.detail }}</div></div>
+    {% if a.player or a.link %}</a>{% else %}</div>{% endif %}
+  {% endfor %}</div>
+</section>
+{% endif %}
 
 {% if wins_series %}
 <section class="card" style="margin-top:1rem">

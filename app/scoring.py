@@ -33,6 +33,8 @@ class RoundIn(BaseModel):
 class PlayPayload(BaseModel):
     players: list[SeatIn]
     rounds: list[RoundIn] = Field(default_factory=list)
+    # score sheet: {category_id: {player_id: points}}
+    categories: dict[int, dict[int, float | None]] = Field(default_factory=dict)
     winners_manual: bool = False
     coop_won: bool | None = None
 
@@ -48,6 +50,9 @@ class PlayPayload(BaseModel):
             extra = (set(r.scores) | set(r.won)) - seated
             if extra:
                 raise ValueError(f"Round {i} has a score for someone who isn't playing.")
+        for cat in self.categories.values():
+            if set(cat) - seated:
+                raise ValueError("The score sheet has a score for someone who isn't playing.")
         return self
 
 
@@ -86,11 +91,19 @@ def compute(scoring: str, payload: PlayPayload) -> list[SeatResult]:
         for pid in set(r.won):
             round_wins[pid] += 1
 
+    sheet_totals: dict[int, float] = {}
+    for cat in payload.categories.values():
+        for pid, val in cat.items():
+            if val is not None:
+                sheet_totals[pid] = sheet_totals.get(pid, 0.0) + val
+
     totals: dict[int, float | None] = {}
     manual: dict[int, bool] = {}
     for s in payload.players:
         if s.score is not None:
             totals[s.player_id], manual[s.player_id] = s.score, True
+        elif s.player_id in sheet_totals:
+            totals[s.player_id], manual[s.player_id] = sheet_totals[s.player_id], False
         else:
             totals[s.player_id], manual[s.player_id] = round_totals.get(s.player_id), False
 

@@ -2,16 +2,17 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import media, notify
 from ..auth import current_user, verify_csrf
 from ..config import get_settings
 from ..db import get_db
-from ..models import Game, Play, PlaySeat, Player, Round, RoundScore
+from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore, utcnow
 from ..scoring import PlayPayload, compute
 from ..stats import color_for
 from ..templating import flash, render
@@ -25,9 +26,11 @@ def _get_play(db: Session, play_id: int) -> Play:
         select(Play)
         .where(Play.id == play_id)
         .options(
-            selectinload(Play.game),
+            selectinload(Play.game).selectinload(Game.categories),
             selectinload(Play.seats).selectinload(PlaySeat.player),
             selectinload(Play.rounds).selectinload(Round.scores),
+            selectinload(Play.category_scores),
+            selectinload(Play.photos),
         )
     )
     if play is None:
@@ -40,7 +43,8 @@ def can_edit(user: Player, play: Play) -> bool:
 
 
 def _form_context(db: Session, user: Player, play: Play | None, state: dict, error: str | None = None) -> dict:
-    games = db.scalars(select(Game).where(Game.archived.is_(False)).order_by(Game.name)).all()
+    games = db.scalars(select(Game).where(Game.archived.is_(False)).order_by(Game.name)
+                       .options(selectinload(Game.categories))).all()
     if play is not None and play.game not in games:
         games = [play.game, *games]
     seated_ids = {s.player_id for s in play.seats} if play else set()
@@ -72,7 +76,9 @@ def _form_context(db: Session, user: Player, play: Play | None, state: dict, err
         "locations": locations,
         "boot": {
             "games": [{"id": g.id, "name": g.name, "scoring": g.scoring, "uses_rounds": g.uses_rounds,
-                       "round_label": g.round_label or "Round"} for g in games],
+                       "round_label": g.round_label or "Round",
+                       "categories": [{"id": c.id, "name": c.name, "archived": c.archived} for c in g.categories]}
+                      for g in games],
             "players": [{"id": p.id, "name": p.display_name, "initials": p.initials, "color": color_for(p),
                          "avatar": p.avatar_url, "guest": p.source == "local"} for p in players],
             "last_lineup": last_lineup,
@@ -89,10 +95,19 @@ def _state_from_play(play: Play) -> dict:
         "rounds": [{"label": r.label,
                     "scores": {str(rs.player_id): rs.score for rs in r.scores},
                     "won": [rs.player_id for rs in r.scores if rs.won]} for r in play.rounds],
+        "categories": _sheet_state(play),
+        "use_sheet": bool(play.category_scores),
         "winners_manual": play.winners_manual,
         "coop_won": play.coop_won,
         "use_rounds": bool(play.rounds),
     }
+
+
+def _sheet_state(play: Play) -> dict:
+    out: dict[str, dict[str, float]] = {}
+    for cs in play.category_scores:
+        out.setdefault(str(cs.category_id), {})[str(cs.player_id)] = cs.score
+    return out
 
 
 def _clean(v, maxlen: int | None = None):
@@ -117,6 +132,9 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
         for s in payload.players:
             if db.get(Player, s.player_id) is None:
                 raise ValueError("Unknown player.")
+        valid_cats = {c.id for c in game.categories}
+        if set(payload.categories) - valid_cats:
+            raise ValueError("The score sheet doesn't match this game. Reload and try again.")
     except ValidationError as e:
         msg = "; ".join(err["msg"].removeprefix("Value error, ") for err in e.errors())
         return None, {**raw_state, "game_id": form.get("game_id")}, msg
@@ -135,9 +153,11 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
     play.winners_manual = payload.winners_manual and game.scoring != "coop"
     if play.created_by_id is None:
         play.created_by_id = user.id
+    play.updated_at = utcnow()  # seats/rounds may change without touching the play row
 
     play.seats.clear()
     play.rounds.clear()
+    play.category_scores.clear()
     db.flush()
     for r in results:
         play.seats.append(PlaySeat(player_id=r.player_id, score=r.score, score_manual=r.score_manual,
@@ -150,6 +170,11 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
             if score is not None or s.player_id in won:
                 rnd.scores.append(RoundScore(player_id=s.player_id, score=score, won=s.player_id in won))
         play.rounds.append(rnd)
+    seated = {s.player_id for s in payload.players}
+    for cat_id, scores in payload.categories.items():
+        for pid, val in scores.items():
+            if val is not None and pid in seated:
+                play.category_scores.append(CategoryScore(category_id=cat_id, player_id=pid, score=val))
     return play, raw_state, None
 
 
@@ -182,7 +207,8 @@ def new_play(request: Request, game: int | None = None, user: Player = Depends(c
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_play(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def create_play(request: Request, background: BackgroundTasks, user: Player = Depends(current_user),
+                      db: Session = Depends(get_db)):
     play = Play()
     saved, state, error = await _apply_form(request, db, play, user)
     if not error:
@@ -193,6 +219,9 @@ async def create_play(request: Request, user: Player = Depends(current_user), db
         return render(request, "plays/form.html", {**_form_context(db, user, None, state, error),
                                                    "now": form.get("played_at"), "form": form}, 422)
     db.commit()
+    s = get_settings()
+    if s.notify_enabled:
+        background.add_task(notify.send_logged, s, notify.summarize(_get_play(db, play.id), s.base_url))
     flash(request, "Play saved.")
     return RedirectResponse(f"/plays/{play.id}", status_code=303)
 
@@ -236,7 +265,10 @@ def delete_play(play_id: int, request: Request, user: Player = Depends(current_u
     play = _get_play(db, play_id)
     if not can_edit(user, play):
         raise HTTPException(403)
+    keys = [ph.key for ph in play.photos]
     db.delete(play)
     db.commit()
+    for k in keys:
+        media.delete_photo(k)
     flash(request, "Play deleted.")
     return RedirectResponse("/plays", status_code=303)

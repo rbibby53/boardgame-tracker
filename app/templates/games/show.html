@@ -3,10 +3,14 @@
 {% block title %}{{ game.name }} · {{ settings.app_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>
+  <div class="row" style="gap:1rem">
+    {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
+    <div>
     <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}</h1>
     <p class="muted">{{ game.scoring_label }}{% if game.min_players %} · {{ game.min_players }}{% if game.max_players and game.max_players != game.min_players %}–{{ game.max_players }}{% endif %} players{% endif %}
+      {% if game.year %} · {{ game.year }}{% endif %}{% if game.play_time_min %} · ~{{ game.play_time_min }} min{% endif %}
       {% if game.bgg_id %} · <a href="https://boardgamegeek.com/boardgame/{{ game.bgg_id }}" rel="noopener noreferrer" target="_blank">BGG</a>{% endif %}</p>
+    </div>
   </div>
   <div class="row">
     <a class="btn" href="/games/{{ game.id }}/edit">Edit</a>
@@ -30,17 +34,19 @@
 
 {% if game.notes %}<div class="card" style="margin-bottom:1rem"><p class="notes" style="margin:0">{{ game.notes }}</p></div>{% endif %}
 
-<div class="grid two">
+<div class="grid">
   <section class="card flush">
     <h2>Standings</h2>
     {% if board %}
     <div class="table-wrap"><table>
       <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Plays</th><th class="num">Win %</th>
-        {% if game.scoring in ("high", "low") %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}</tr></thead>
+        {% if game.scoring in ("high", "low") %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}
+        {% if game.scoring != "coop" %}<th class="num">Rating</th>{% endif %}</tr></thead>
       <tbody>
       {% for r in board %}
         <tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td><td class="num">{{ r.win_rate|pct }}</td>
-          {% if game.scoring in ("high", "low") %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}</tr>
+          {% if game.scoring in ("high", "low") %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}
+          {% if game.scoring != "coop" %}{% set gr = rt.game_for(game.id, r.player.id) %}<td class="num">{{ gr if gr else "—" }}{% if gr and rt.provisional(r.player.id, game.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>{% endif %}</tr>
       {% endfor %}
       </tbody>
     </table></div>
@@ -53,11 +59,33 @@
   </section>
 </div>
 
+{% if sheet %}
+<section class="card flush" style="margin-top:1rem">
+  <h2>Score sheet averages</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Category</th>{% for p in sheet.players %}<th class="num">{{ p.display_name }}</th>{% endfor %}<th class="num">Record</th></tr></thead>
+    <tbody>{% for r in sheet.rows %}
+      <tr><td>{{ r.cat.name }}{% if r.cat.archived %} <span class="tag">retired</span>{% endif %}</td>
+        {% set top = (r.avgs.values()|list|min if game.scoring == "low" else r.avgs.values()|list|max) if r.avgs else none %}
+        {% for p in sheet.players %}{% set a = r.avgs.get(p.id) %}<td class="num {{ 'round-win' if a is not none and a == top and r.avgs|length > 1 }}">{{ a|score if a is not none else "—" }}</td>{% endfor %}
+        <td class="num nowrap">{% if r.best %}<a href="/plays/{{ r.best[2] }}">{{ r.best[0]|score }}</a> <span class="muted small">{{ r.best[1].display_name if r.best[1] }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <p class="small muted" style="padding:0 1rem">Averages per play. Highlighted = strongest in that category.</p>
+</section>
+{% endif %}
+
 {% if score_series %}
 <section class="card" style="margin-top:1rem">
   <h2>Scores over time</h2>
   {{ chart("scoreChart", score_series, "score") }}
   <p class="small muted">★ marks a win. Click a point to open that play.</p>
+</section>
+{% endif %}
+{% if rating_series %}
+<section class="card" style="margin-top:1rem">
+  <h2>{{ game.name }} rating over time</h2>
+  {{ chart("ratingChart", rating_series, "rating") }}
 </section>
 {% endif %}
 {% if wins_series and game.scoring != "coop" %}

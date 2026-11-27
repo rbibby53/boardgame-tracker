@@ -4,11 +4,11 @@ import io
 import json
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import stats
+from .. import backup, importer, notify, ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -25,6 +25,7 @@ def admin_home(request: Request, user: Player = Depends(require_admin), db: Sess
     s = get_settings()
     return render(request, "admin/index.html", {
         "logs": db.scalars(select(SyncLog).order_by(SyncLog.id.desc()).limit(15)).all(),
+        "backups": backup.list_backups() if s.is_sqlite else [],
         "guests": db.scalars(select(Player).where(Player.source == "local").order_by(Player.display_name)).all(),
         "sso_players": db.scalars(select(Player).where(Player.source == "sso", Player.is_active.is_(True))
                                   .order_by(Player.display_name)).all(),
@@ -37,6 +38,11 @@ def admin_home(request: Request, user: Player = Depends(require_admin), db: Sess
             "admin_group": s.oidc_admin_group or "(not set: Authentik superusers become admins via sync)",
             "allowed_group": s.oidc_allowed_group or "(not set)",
             "issuer": s.oidc_issuer,
+            "is_sqlite": s.is_sqlite,
+            "backup_hour": s.backup_hour,
+            "backup_keep": s.backup_keep,
+            "notify": [n for n, on in (("ntfy", s.ntfy_url), ("Discord", s.discord_webhook_url),
+                                       ("webhook", s.notify_webhook_url)) if on],
         },
     })
 
@@ -59,6 +65,20 @@ async def sync_now(request: Request, user: Player = Depends(require_admin)):
         flash(request, str(e), "err")
     except Exception as e:  # noqa: BLE001
         flash(request, f"Sync failed: {e}", "err")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/notify-test", dependencies=[Depends(verify_csrf)])
+async def notify_test(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    s = get_settings()
+    if not s.notify_enabled:
+        flash(request, "No notification targets configured (NTFY_URL / DISCORD_WEBHOOK_URL / NOTIFY_WEBHOOK_URL).", "err")
+        return RedirectResponse("/admin", status_code=303)
+    msg = {"event": "test", "play_id": None, "game": "Test", "played_at": None, "location": None,
+           "headline": f"🎲 Test from {s.app_name}", "body": f"Sent by {user.display_name}. Notifications work!",
+           "url": s.base_url + "/", "players": [], "winners": [], "coop_won": None}
+    errors = await asyncio.to_thread(notify.send, s, msg)
+    flash(request, "Test sent." if not errors else "Some targets failed: " + "; ".join(errors), "err" if errors else "ok")
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -93,8 +113,100 @@ def merge_guest(request: Request, guest_id: int = Form(...), target_id: int = Fo
     db.execute(update(Play).where(Play.created_by_id == guest.id).values(created_by_id=target.id))
     db.delete(guest)
     db.commit()
+    ratings.invalidate()
     flash(request, f"Merged {guest.display_name} into {target.display_name}.")
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------- backups
+
+
+@router.post("/admin/backup", dependencies=[Depends(verify_csrf)])
+async def backup_now(request: Request, user: Player = Depends(require_admin)):
+    try:
+        p = await asyncio.to_thread(backup.run_backup)
+        flash(request, f"Backup written: {p.name}")
+    except backup.BackupError as e:
+        flash(request, str(e), "err")
+    return RedirectResponse("/admin#backups", status_code=303)
+
+
+@router.get("/admin/backups/{name}")
+def download_backup(name: str, user: Player = Depends(require_admin)):
+    p = backup.path_for(name)
+    if p is None:
+        raise HTTPException(404)
+    return FileResponse(p, media_type="application/gzip", filename=name)
+
+
+# ---------------------------------------------------------------- import
+
+
+@router.get("/admin/import")
+def import_page(request: Request, user: Player = Depends(require_admin)):
+    from .. import bgg
+
+    return render(request, "admin/import.html", {"bgg_enabled": bgg.enabled()})
+
+
+@router.post("/admin/import", dependencies=[Depends(verify_csrf)])
+async def import_upload(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from starlette.datastructures import UploadFile
+
+    from .. import bgg
+
+    form = await request.form()
+    f = form.get("file")
+    username = (form.get("bgg_username") or "").strip()
+    try:
+        if isinstance(f, UploadFile) and f.filename:
+            data = await f.read(30_000_001)
+            if len(data) > 30_000_000:
+                raise importer.ImportError_("File is larger than 30 MB.")
+            if data.lstrip().startswith(b"<"):
+                plays, source = importer.parse_bgg_xml(data), f"BGG XML ({f.filename})"
+            else:
+                try:
+                    text = data.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    text = data.decode("latin-1")
+                plays, source = importer.parse_csv(text), f"CSV ({f.filename})"
+        elif username:
+            plays = await asyncio.to_thread(importer.fetch_bgg_user, username[:100])
+            source = f"BGG user {username}"
+        else:
+            raise importer.ImportError_("Choose a file or enter a BoardGameGeek username.")
+        if not plays:
+            raise importer.ImportError_("No plays found in that file.")
+        token = importer.stage(plays, source)
+    except (importer.ImportError_, bgg.BggError) as e:
+        return render(request, "admin/import.html", {"bgg_enabled": bgg.enabled(), "error": str(e)}, 422)
+    return render(request, "admin/import.html", {
+        "bgg_enabled": bgg.enabled(), "token": token, "source": source,
+        "pv": importer.preview(db, plays), "sample": plays[:5],
+    })
+
+
+@router.post("/admin/import/{token}/apply", dependencies=[Depends(verify_csrf)])
+def import_apply(token: str, request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    try:
+        source, plays = importer.load(token)
+    except importer.ImportError_ as e:
+        flash(request, str(e), "err")
+        return RedirectResponse("/admin/import", status_code=303)
+    res = importer.apply(db, plays, user)
+    importer.discard(token)
+    ratings.invalidate()
+    flash(request, f"Imported {res['plays']} plays from {source}: {res['games']} new games, "
+                   f"{res['players']} new guest players, {res['skipped']} duplicates skipped.")
+    return RedirectResponse("/plays", status_code=303)
+
+
+@router.post("/admin/import/{token}/cancel", dependencies=[Depends(verify_csrf)])
+def import_cancel(token: str, request: Request, user: Player = Depends(require_admin)):
+    importer.discard(token)
+    flash(request, "Import cancelled.")
+    return RedirectResponse("/admin/import", status_code=303)
 
 
 # ---------------------------------------------------------------- export / API

@@ -6,10 +6,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}{{ settings.app_name }}{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ V }}">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
   <meta name="theme-color" content="#2f6fdb">
-  <script src="/static/vendor/chart.umd.min.js" defer></script>
-  <script src="/static/app.js" defer></script>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="{{ settings.app_name }}">
+  <script src="/static/vendor/chart.umd.min.js?v={{ V }}" defer></script>
+  <script src="/static/app.js?v={{ V }}" defer></script>
 </head>
 <body>
 {% if settings.dev_mode %}<div class="devbar">DEV MODE: SSO is disabled. Do not expose this instance.</div>{% endif %}
@@ -21,14 +26,16 @@
     <nav class="nav">
       <a href="/" class="{{ 'on' if path == '/' }}">Dashboard</a>
       <a href="/plays" class="{{ 'on' if path.startswith('/plays') and path != '/plays/new' }}">Plays</a>
+      <a href="/nights" class="{{ 'on' if path.startswith('/nights') }}">Nights</a>
       <a href="/games" class="{{ 'on' if path.startswith('/games') }}">Games</a>
       <a href="/players" class="{{ 'on' if path.startswith('/players') }}">Players</a>
+      <a href="/pick" class="{{ 'on' if path.startswith('/pick') }}">Pick</a>
       {% if user.is_admin %}<a href="/admin" class="{{ 'on' if path.startswith('/admin') }}">Admin</a>{% endif %}
     </nav>
     <div class="me">
       <a class="btn primary sm" href="/plays/new">+ Log play</a>
       <a href="/players/{{ user.id }}" title="{{ user.display_name }}">{{ avatar(user) }}</a>
-      <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out">Sign out</button></form>
+      <form method="post" action="/logout" onsubmit="GN.forget()"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out">Sign out</button></form>
     </div>
     {% endif %}
   </div>

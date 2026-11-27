@@ -66,5 +66,32 @@ window.GN = (() => {
     });
   }
 
-  return { tab, lineChart };
+  function forget() {
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith("gn-draft:")).forEach((k) => localStorage.removeItem(k));
+    } catch (_) { /* storage blocked */ }
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage("clear");
+    if (window.caches) caches.keys().then((ks) => ks.forEach((k) => caches.delete(k)));
+  }
+
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {}));
+  }
+
+  function netBadge() {
+    let el = document.getElementById("offlineBadge");
+    if (navigator.onLine) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "offlineBadge";
+      el.className = "offline-badge";
+      el.textContent = "Offline: changes are saved on this device until you reconnect";
+      document.body.prepend(el);
+    }
+  }
+  window.addEventListener("online", netBadge);
+  window.addEventListener("offline", netBadge);
+  document.addEventListener("DOMContentLoaded", netBadge);
+
+  return { tab, lineChart, forget };
 })();

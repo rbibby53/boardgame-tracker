@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Admin · {{ settings.app_name }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Admin</h1></div>
+<div class="page-head"><h1>Admin</h1><a class="btn" href="/admin/import">Import plays</a></div>
 <div class="grid two">
   <section class="card">
     <h2>Authentik user sync</h2>
@@ -19,6 +19,10 @@
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn primary" {{ 'disabled' if not cfg.sync_enabled }}>Sync now</button>
     </form>
+    <h3 style="margin-top:1.25rem">Notifications</h3>
+    <p class="small muted">{{ "Sending to: " ~ cfg.notify|join(", ") if cfg.notify else "Not configured. Set NTFY_URL, DISCORD_WEBHOOK_URL or NOTIFY_WEBHOOK_URL." }}</p>
+    <form method="post" action="/admin/notify-test"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn" {{ 'disabled' if not cfg.notify }}>Send test notification</button></form>
   </section>
   <section class="card flush">
     <h2>Recent syncs</h2>
@@ -33,6 +37,22 @@
     {% else %}<div class="empty">No syncs yet.</div>{% endif %}
   </section>
 </div>
+
+<section class="card flush" style="margin-top:1rem" id="backups">
+  <div class="row" style="padding:1rem 1rem 0"><h2 style="margin:0">Backups</h2><span class="spacer"></span>
+    {% if cfg.is_sqlite %}<form method="post" action="/admin/backup" class="inline"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Back up now</button></form>{% endif %}</div>
+  {% if cfg.is_sqlite %}
+  <p class="small muted" style="padding:0 1rem">{% if cfg.backup_keep > 0 %}Daily at {{ cfg.backup_hour }}:00, keeping the newest {{ cfg.backup_keep }}.{% else %}Scheduled backups are off (BACKUP_KEEP=0).{% endif %}
+    Stored in <code>{{ settings.data_dir }}/backups</code>. Photos and covers live in <code>{{ settings.data_dir }}</code> too, so back up the whole folder off-box.</p>
+  {% if backups %}
+  <div class="table-wrap"><table><tbody>{% for b in backups %}
+    <tr><td><a href="/admin/backups/{{ b.name }}">{{ b.name }}</a></td><td class="num small muted">{{ "%.1f"|format(b.size / 1024) }} KB</td></tr>
+  {% endfor %}</tbody></table></div>
+  {% else %}<div class="empty">No backups yet.</div>{% endif %}
+  {% else %}
+  <p class="small muted" style="padding:0 1rem 1rem">You're on Postgres: schedule <code>pg_dump</code>. Built-in backups cover SQLite only.</p>
+  {% endif %}
+</section>
 
 <div class="grid two" style="margin-top:1rem">
   <section class="card">

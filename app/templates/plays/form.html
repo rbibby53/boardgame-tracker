@@ -4,6 +4,7 @@
 <div class="page-head"><h1>{{ "Edit play" if play else "Log a play" }}</h1>
   {% if play %}<a class="btn ghost" href="/plays/{{ play.id }}">Cancel</a>{% endif %}</div>
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="flash ok draft-bar" id="draftBar" hidden><span id="draftMsg"></span><button type="button" class="btn sm" id="draftDiscard">Discard draft</button></div>
 
 <form method="post" action="{{ '/plays/' ~ play.id if play else '/plays' }}" id="playForm" class="stack" novalidate>
   <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -51,7 +52,13 @@
   <section class="card" id="scoreCard">
     <div class="row" style="margin-bottom:.75rem">
       <h2 style="margin:0">Scores</h2><span class="spacer"></span>
+      <label class="check" id="sheetToggleWrap" hidden><input type="checkbox" id="useSheet"> <span>Score sheet</span></label>
       <label class="check" id="roundsToggleWrap"><input type="checkbox" id="useRounds"> <span>Track <span id="roundWord">round</span>s</span></label>
+    </div>
+
+    <div id="sheetWrap" hidden>
+      <div class="score-grid"><table id="sheetTable"></table></div>
+      <p class="hint" style="margin:.4rem 0 1rem">Totals fill in automatically from the sheet.</p>
     </div>
 
     <div id="roundsWrap" hidden>
@@ -88,5 +95,5 @@
 
 <datalist id="locs">{% for l in locations %}<option value="{{ l }}">{% endfor %}</datalist>
 <script type="application/json" id="boot">{{ boot|tojson }}</script>
-<script src="/static/play-form.js" defer></script>
+<script src="/static/play-form.js?v={{ V }}" defer></script>
 {% endblock %}
