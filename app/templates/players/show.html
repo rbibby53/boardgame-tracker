@@ -15,9 +15,34 @@
   <div class="card stat"><div class="v">{{ summary.wins }}</div><div class="l">Competitive wins</div></div>
   <div class="card stat"><div class="v">{{ (summary.wins / summary.comp)|pct if summary.comp else "—" }}</div><div class="l">Win rate</div></div>
   {% if summary.coop %}<div class="card stat"><div class="v">{{ summary.coop_wins }}/{{ summary.coop }}</div><div class="l">Co-op wins</div></div>{% endif %}
+  <div class="card stat"><div class="v">{{ streak.current }}{% if streak.current >= 3 %} 🔥{% endif %}</div><div class="l">Current win streak · best {{ streak.best }}</div></div>
   <div class="card stat"><div class="v">{{ summary.games }}</div><div class="l">Different games</div></div>
   <div class="card stat"><div class="v">{{ rating or "—" }}{% if rating and rt.provisional(p.id) %}<span class="muted small" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</div><div class="l">Overall rating</div></div>
 </div>
+
+{% if rivals.nemesis or rivals.victim %}
+<div class="grid two" style="margin-bottom:1rem">
+  {% if rivals.nemesis %}{% set o = rivals.nemesis %}
+  <div class="card row"><span style="font-size:1.6rem">😈</span><div><div class="small muted">Nemesis</div>{{ who(o.player) }}
+    <div class="small muted">beat {{ p.display_name.split()[0] }} {{ o.theirs }} times, lost {{ o.mine }} ({{ o.together }} games together)</div></div></div>
+  {% endif %}
+  {% if rivals.victim %}{% set o = rivals.victim %}
+  <div class="card row"><span style="font-size:1.6rem">🎯</span><div><div class="small muted">Favorite victim</div>{{ who(o.player) }}
+    <div class="small muted">{{ p.display_name.split()[0] }} won {{ o.mine }}, lost {{ o.theirs }} ({{ o.together }} games together)</div></div></div>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if achievements %}
+<section class="card" style="margin-bottom:1rem">
+  <h2>Achievements</h2>
+  <div class="badges">{% for a in achievements %}
+    <div class="badge" title="{{ a.detail }}{% if a.earned %} · {{ a.earned|dt('%b %-d, %Y') }}{% endif %}">
+      <span class="e">{{ a.emoji }}</span><div><strong>{{ a.title }}</strong>{% if a.count > 1 %} ×{{ a.count }}{% endif %}
+      <div class="small muted">{{ a.detail }}{% if a.earned %} · {{ a.earned|dt("%b %-d, %Y") }}{% endif %}</div></div></div>
+  {% endfor %}</div>
+</section>
+{% endif %}
 
 <div class="grid two">
   <section class="card flush">

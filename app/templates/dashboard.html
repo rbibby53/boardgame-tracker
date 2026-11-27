@@ -68,6 +68,18 @@
   </section>
 </div>
 
+{% if awards %}
+<section class="card" style="margin-top:1rem">
+  <h2>Awards</h2>
+  <div class="badges">{% for a in awards %}
+    {% if a.player %}<a class="badge" href="/players/{{ a.player.id }}">{% elif a.link %}<a class="badge" href="{{ a.link }}">{% else %}<div class="badge">{% endif %}
+      <span class="e">{{ a.emoji }}</span><div><div class="small muted">{{ a.title }}</div><strong>{{ a.player.display_name if a.player else "" }}</strong>
+      <div class="small muted">{{ a.detail }}</div></div>
+    {% if a.player or a.link %}</a>{% else %}</div>{% endif %}
+  {% endfor %}</div>
+</section>
+{% endif %}
+
 {% if wins_series %}
 <section class="card" style="margin-top:1rem">
   <h2>Wins over time</h2>

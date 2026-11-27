@@ -224,3 +224,7 @@ td.rank { width: 2.5rem; color: var(--muted); font-variant-numeric: tabular-nums
 .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-2); }
 .cover { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; background: var(--surface-2); flex: none; }
 .cover.sm { width: 32px; height: 32px; border-radius: 6px; }
+.badges { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.badge { display: flex; gap: .6rem; align-items: center; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); }
+a.badge:hover { background: var(--surface-2); text-decoration: none; }
+.badge .e { font-size: 1.5rem; line-height: 1; }
