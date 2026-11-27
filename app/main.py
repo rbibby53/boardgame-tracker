@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
     )
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
-    for r in (auth.router, pages.router, plays.router, games.router, players.router, nights.router, picker.router, media.router, admin.router):
+    for r in (auth.router, pages.router, plays.router, games.router, players.router, nights.router, picker.router, media.router, games.api, admin.router):
         app.include_router(r)
 
     @app.exception_handler(auth.LoginRequired)

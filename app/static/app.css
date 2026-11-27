@@ -231,3 +231,5 @@ a.badge:hover { background: var(--surface-2); text-decoration: none; }
 .photo { position: relative; margin: 0; }
 .photo form { position: absolute; top: .25rem; right: .25rem; margin: 0; }
 .photo form .btn { background: rgba(0,0,0,.55); color: #fff; border-radius: 999px; padding: .15rem .45rem; }
+.bgg-results { list-style: none; padding: 0; margin: .4rem 0 0; display: flex; flex-direction: column; gap: .15rem; max-height: 260px; overflow-y: auto; }
+.bgg-results .btn { justify-content: flex-start; width: 100%; text-align: left; font-weight: 500; }

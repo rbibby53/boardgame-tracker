@@ -1,15 +1,56 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import media, ratings, stats
+import asyncio
+
+from .. import bgg, media, ratings, stats
 from ..auth import current_user, require_admin, verify_csrf
 from ..db import get_db
 from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player
 from ..templating import flash, render
 
 router = APIRouter(prefix="/games")
+api = APIRouter(prefix="/api/bgg")
+
+
+@api.get("/search")
+async def bgg_search(q: str = "", user: Player = Depends(current_user)):
+    try:
+        return {"results": await asyncio.to_thread(bgg.search, q[:100])}
+    except bgg.BggError as e:
+        return JSONResponse({"error": str(e)}, 502)
+
+
+@api.get("/thing/{bgg_id}")
+async def bgg_thing(bgg_id: int, user: Player = Depends(current_user)):
+    try:
+        return await asyncio.to_thread(bgg.thing, bgg_id)
+    except bgg.BggError as e:
+        return JSONResponse({"error": str(e)}, 502)
+
+
+def _cover_from_bgg(game: Game) -> str | None:
+    """Download the BGG cover for game.bgg_id. Returns an error message or None."""
+    try:
+        info = bgg.thing(game.bgg_id)
+        if not info.get("image"):
+            return "BoardGameGeek has no image for this game."
+        media.save_cover(game.id, bgg.fetch_image(info["image"]))
+    except (bgg.BggError, media.ImageError) as e:
+        return str(e)
+    game.has_cover = True
+    return None
+
+
+async def _maybe_bgg_cover(request: Request, db: Session, game: Game) -> None:
+    form = await request.form()
+    if form.get("bgg_cover") == "1" and game.bgg_id and bgg.enabled():
+        err = await asyncio.to_thread(_cover_from_bgg, game)
+        db.commit()
+        if err:
+            flash(request, f"Saved, but the cover didn't download: {err}", "err")
 
 
 def _int_or_none(v) -> int | None:
@@ -92,7 +133,7 @@ def list_games(request: Request, archived: bool = False, user: Player = Depends(
 
 @router.get("/new")
 def new_game(request: Request, user: Player = Depends(current_user)):
-    return render(request, "games/form.html", {"game": None})
+    return render(request, "games/form.html", {"bgg_enabled": bgg.enabled(), "game": None})
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
@@ -102,10 +143,11 @@ async def create_game(request: Request, user: Player = Depends(current_user), db
     if not err and db.scalar(select(Game).where(func.lower(Game.name) == game.name.lower())):
         err = f"'{game.name}' already exists."
     if err:
-        return render(request, "games/form.html", {"game": None, "error": err, "form": await request.form()}, 422)
+        return render(request, "games/form.html", {"bgg_enabled": bgg.enabled(), "game": None, "error": err, "form": await request.form()}, 422)
     db.add(game)
     db.commit()
     flash(request, f"Added {game.name}.")
+    await _maybe_bgg_cover(request, db, game)
     nxt = (await request.form()).get("next")
     if nxt == "log":
         return RedirectResponse(f"/plays/new?game={game.id}", status_code=303)
@@ -138,7 +180,7 @@ def edit_game(game_id: int, request: Request, user: Player = Depends(current_use
     game = db.get(Game, game_id)
     if game is None:
         raise HTTPException(404)
-    return render(request, "games/form.html", {"game": game})
+    return render(request, "games/form.html", {"bgg_enabled": bgg.enabled(), "game": game})
 
 
 @router.post("/{game_id}", dependencies=[Depends(verify_csrf)])
@@ -154,10 +196,11 @@ async def update_game(game_id: int, request: Request, user: Player = Depends(cur
             err = f"'{game.name}' already exists."
     if err:
         db.rollback()
-        return render(request, "games/form.html", {"game": db.get(Game, game_id), "error": err,
+        return render(request, "games/form.html", {"bgg_enabled": bgg.enabled(), "game": db.get(Game, game_id), "error": err,
                                                    "form": await request.form()}, 422)
     db.commit()
     flash(request, "Game updated. Existing plays keep the winners they were saved with.")
+    await _maybe_bgg_cover(request, db, game)
     return RedirectResponse(f"/games/{game.id}", status_code=303)
 
 

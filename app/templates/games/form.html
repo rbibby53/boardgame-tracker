@@ -1,10 +1,21 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit " ~ game.name if game else "Add game" }} · {{ settings.app_name }}{% endblock %}
+{% block title %}{{ "Edit " ~ game.name if game else "Add game" }} · {{ settings.app_name }}{% if bgg_enabled %}<script src="/static/game-form.js?v={{ V }}" defer></script>{% endif %}
+{% endblock %}
 {% set f = form if form else {} %}
 {% macro val(name, default="") -%}{{ f[name] if name in f else default }}{%- endmacro %}
 {% block content %}
 <div class="page-head"><h1>{{ "Edit " ~ game.name if game else "Add a game" }}</h1></div>
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+{% if bgg_enabled %}
+<section class="card" style="margin-bottom:1rem" id="bggBox">
+  <label for="bggQuery">Look up on BoardGameGeek <span class="hint">fills in players, play time, year and cover</span></label>
+  <div class="row"><input type="search" id="bggQuery" placeholder="Game name…" style="flex:1;min-width:180px" autocomplete="off">
+    <button type="button" class="btn sm" id="bggGo">Search</button></div>
+  <div id="bggStatus" class="hint" style="margin-top:.4rem"></div>
+  <ul id="bggResults" class="bgg-results"></ul>
+  <div class="hint" style="margin-top:.4rem">Data from <a href="https://boardgamegeek.com" target="_blank" rel="noopener noreferrer">BoardGameGeek</a>.</div>
+</section>
+{% endif %}
 <form method="post" action="{{ '/games/' ~ game.id if game else '/games' }}" class="card">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="next" value="{{ request.query_params.get('next', '') }}">
@@ -36,6 +47,9 @@
     <div class="wide"><label for="notes">Notes <span class="hint">house rules, setup reminders</span></label>
       <textarea id="notes" name="notes">{{ val('notes', game.notes if game and game.notes else '') }}</textarea></div>
   </div>
+  {% if bgg_enabled %}
+  <label class="check" style="margin-top:.75rem"><input type="checkbox" name="bgg_cover" value="1" id="bggCover"> <span>Use the BoardGameGeek cover image</span></label>
+  {% endif %}
   <div class="form-actions">
     <a class="btn ghost" href="{{ '/games/' ~ game.id if game else '/games' }}">Cancel</a>
     <button class="btn primary">{{ "Save" if game else "Add game" }}</button>
