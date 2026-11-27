@@ -2,12 +2,13 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import notify
 from ..auth import current_user, verify_csrf
 from ..config import get_settings
 from ..db import get_db
@@ -206,7 +207,8 @@ def new_play(request: Request, game: int | None = None, user: Player = Depends(c
 
 
 @router.post("", dependencies=[Depends(verify_csrf)])
-async def create_play(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+async def create_play(request: Request, background: BackgroundTasks, user: Player = Depends(current_user),
+                      db: Session = Depends(get_db)):
     play = Play()
     saved, state, error = await _apply_form(request, db, play, user)
     if not error:
@@ -217,6 +219,9 @@ async def create_play(request: Request, user: Player = Depends(current_user), db
         return render(request, "plays/form.html", {**_form_context(db, user, None, state, error),
                                                    "now": form.get("played_at"), "form": form}, 422)
     db.commit()
+    s = get_settings()
+    if s.notify_enabled:
+        background.add_task(notify.send_logged, s, notify.summarize(_get_play(db, play.id), s.base_url))
     flash(request, "Play saved.")
     return RedirectResponse(f"/plays/{play.id}", status_code=303)
 

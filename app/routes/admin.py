@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import ratings, stats
+from .. import notify, ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -37,6 +37,8 @@ def admin_home(request: Request, user: Player = Depends(require_admin), db: Sess
             "admin_group": s.oidc_admin_group or "(not set: Authentik superusers become admins via sync)",
             "allowed_group": s.oidc_allowed_group or "(not set)",
             "issuer": s.oidc_issuer,
+            "notify": [n for n, on in (("ntfy", s.ntfy_url), ("Discord", s.discord_webhook_url),
+                                       ("webhook", s.notify_webhook_url)) if on],
         },
     })
 
@@ -59,6 +61,20 @@ async def sync_now(request: Request, user: Player = Depends(require_admin)):
         flash(request, str(e), "err")
     except Exception as e:  # noqa: BLE001
         flash(request, f"Sync failed: {e}", "err")
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/notify-test", dependencies=[Depends(verify_csrf)])
+async def notify_test(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    s = get_settings()
+    if not s.notify_enabled:
+        flash(request, "No notification targets configured (NTFY_URL / DISCORD_WEBHOOK_URL / NOTIFY_WEBHOOK_URL).", "err")
+        return RedirectResponse("/admin", status_code=303)
+    msg = {"event": "test", "play_id": None, "game": "Test", "played_at": None, "location": None,
+           "headline": f"🎲 Test from {s.app_name}", "body": f"Sent by {user.display_name}. Notifications work!",
+           "url": s.base_url + "/", "players": [], "winners": [], "coop_won": None}
+    errors = await asyncio.to_thread(notify.send, s, msg)
+    flash(request, "Test sent." if not errors else "Some targets failed: " + "; ".join(errors), "err" if errors else "ok")
     return RedirectResponse("/admin", status_code=303)
 
 
