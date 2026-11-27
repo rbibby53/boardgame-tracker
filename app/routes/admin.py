@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import notify, ratings, stats
+from .. import importer, notify, ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -112,6 +112,76 @@ def merge_guest(request: Request, guest_id: int = Form(...), target_id: int = Fo
     ratings.invalidate()
     flash(request, f"Merged {guest.display_name} into {target.display_name}.")
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------------------------------------------------------------- import
+
+
+@router.get("/admin/import")
+def import_page(request: Request, user: Player = Depends(require_admin)):
+    from .. import bgg
+
+    return render(request, "admin/import.html", {"bgg_enabled": bgg.enabled()})
+
+
+@router.post("/admin/import", dependencies=[Depends(verify_csrf)])
+async def import_upload(request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    from starlette.datastructures import UploadFile
+
+    from .. import bgg
+
+    form = await request.form()
+    f = form.get("file")
+    username = (form.get("bgg_username") or "").strip()
+    try:
+        if isinstance(f, UploadFile) and f.filename:
+            data = await f.read(30_000_001)
+            if len(data) > 30_000_000:
+                raise importer.ImportError_("File is larger than 30 MB.")
+            if data.lstrip().startswith(b"<"):
+                plays, source = importer.parse_bgg_xml(data), f"BGG XML ({f.filename})"
+            else:
+                try:
+                    text = data.decode("utf-8-sig")
+                except UnicodeDecodeError:
+                    text = data.decode("latin-1")
+                plays, source = importer.parse_csv(text), f"CSV ({f.filename})"
+        elif username:
+            plays = await asyncio.to_thread(importer.fetch_bgg_user, username[:100])
+            source = f"BGG user {username}"
+        else:
+            raise importer.ImportError_("Choose a file or enter a BoardGameGeek username.")
+        if not plays:
+            raise importer.ImportError_("No plays found in that file.")
+        token = importer.stage(plays, source)
+    except (importer.ImportError_, bgg.BggError) as e:
+        return render(request, "admin/import.html", {"bgg_enabled": bgg.enabled(), "error": str(e)}, 422)
+    return render(request, "admin/import.html", {
+        "bgg_enabled": bgg.enabled(), "token": token, "source": source,
+        "pv": importer.preview(db, plays), "sample": plays[:5],
+    })
+
+
+@router.post("/admin/import/{token}/apply", dependencies=[Depends(verify_csrf)])
+def import_apply(token: str, request: Request, user: Player = Depends(require_admin), db: Session = Depends(get_db)):
+    try:
+        source, plays = importer.load(token)
+    except importer.ImportError_ as e:
+        flash(request, str(e), "err")
+        return RedirectResponse("/admin/import", status_code=303)
+    res = importer.apply(db, plays, user)
+    importer.discard(token)
+    ratings.invalidate()
+    flash(request, f"Imported {res['plays']} plays from {source}: {res['games']} new games, "
+                   f"{res['players']} new guest players, {res['skipped']} duplicates skipped.")
+    return RedirectResponse("/plays", status_code=303)
+
+
+@router.post("/admin/import/{token}/cancel", dependencies=[Depends(verify_csrf)])
+def import_cancel(token: str, request: Request, user: Player = Depends(require_admin)):
+    importer.discard(token)
+    flash(request, "Import cancelled.")
+    return RedirectResponse("/admin/import", status_code=303)
 
 
 # ---------------------------------------------------------------- export / API
