@@ -62,6 +62,26 @@ def test_vote_flow_tiebreak_and_permissions(client, db):
     assert "Friday?" in client.get("/polls").text
 
 
+def test_vote_for_guest_but_not_other_accounts(client, db):
+    csrf = login(client, "Ryan")
+    guest = Player(display_name="Uncle Bob", source="local")
+    other = Player(display_name="Alice", source="sso", sub="x")
+    a, b = Game(name="A"), Game(name="B")
+    db.add_all([guest, other, a, b])
+    db.commit()
+    r = client.post("/polls", data={"csrf": csrf, "game_ids": [str(a.id), str(b.id)]}, follow_redirects=False)
+    pid = int(r.headers["location"].rsplit("/", 1)[1])
+    assert "Uncle Bob (guest)" in client.get(f"/polls/{pid}").text
+    opt = client.get(f"/polls/{pid}/state").json()["options"][0]["id"]
+    st = client.post(f"/polls/{pid}/vote", json={"option_id": opt, "on": True, "as_player": guest.id},
+                     headers={"X-CSRF-Token": csrf}).json()
+    assert st["options"][0]["voters"] == ["Uncle Bob"] and st["options"][0]["mine"]  # mine = as the guest
+    assert not client.get(f"/polls/{pid}/state").json()["options"][0]["mine"]  # not Ryan's own vote
+    r = client.post(f"/polls/{pid}/vote", json={"option_id": opt, "on": True, "as_player": other.id},
+                    headers={"X-CSRF-Token": csrf})
+    assert r.status_code == 403
+
+
 def test_needs_two_games(client, db):
     csrf = login(client)
     g = Game(name="Solo")

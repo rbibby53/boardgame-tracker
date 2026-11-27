@@ -24,8 +24,15 @@
 <p class="small muted">Tap every game you'd happily play. Most votes wins; ties go to whichever was played longest ago. Results update live.</p>
 {% endif %}
 
+{% if poll.is_open and guests %}
+<div class="row" style="margin-bottom:.75rem">
+  <label for="voteAs" style="margin:0">Voting as</label>
+  <select id="voteAs" style="width:auto"><option value="">Me ({{ user.display_name }})</option>
+    {% for g in guests %}<option value="{{ g.id }}">{{ g.display_name }} (guest)</option>{% endfor %}</select>
+</div>
+{% endif %}
 <div id="poll" data-id="{{ poll.id }}"><ul class="poll-list" id="pollOptions"></ul></div>
-<p class="small muted" style="margin-top:1rem">Share this page with anyone signed in. Guests without an account can tell you their picks and you can tick for them in person.</p>
+<p class="small muted" style="margin-top:1rem">Anyone signed in can open this page to vote. For guests without an account, pick them under "Voting as" and tick their choices.</p>
 <script type="application/json" id="pollBoot">{{ boot|tojson }}</script>
 <script src="/static/poll.js?v={{ V }}" defer></script>
 {% endblock %}

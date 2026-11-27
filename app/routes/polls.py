@@ -46,7 +46,18 @@ def tally(db: Session, poll: Poll) -> list[dict]:
     return rows
 
 
-def state(db: Session, poll: Poll, user: Player) -> dict:
+def _voter(db: Session, user: Player, as_player: int | None) -> Player:
+    """You vote as yourself, or for a guest (local, no login) who's at the table."""
+    if not as_player or as_player == user.id:
+        return user
+    p = db.get(Player, as_player)
+    if p is None or p.source != "local" or not p.is_active:
+        raise HTTPException(403, "You can only vote for yourself or a guest player.")
+    return p
+
+
+def state(db: Session, poll: Poll, user: Player, voter: Player | None = None) -> dict:
+    voter = voter or user
     rows = tally(db, poll)
     voters = {v.player_id for o in poll.options for v in o.votes}
     top = rows[0]["votes"] if rows else 0
@@ -59,7 +70,7 @@ def state(db: Session, poll: Poll, user: Player) -> dict:
             "id": r["option"].id, "game_id": r["game"].id, "name": r["game"].name,
             "cover": r["game"].has_cover, "votes": r["votes"],
             "voters": [p.display_name for p in r["voters"]],
-            "mine": any(p.id == user.id for p in r["voters"]),
+            "mine": any(p.id == voter.id for p in r["voters"]),
             "leading": top > 0 and r["votes"] == top,
             "last": r["last"].strftime("%b %-d, %Y") if r["last"] else None,
         } for r in rows],
@@ -105,12 +116,15 @@ async def create_poll(request: Request, user: Player = Depends(current_user), db
 @router.get("/{poll_id}")
 def show_poll(poll_id: int, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     poll = _load(db, poll_id)
-    return render(request, "polls/show.html", {"poll": poll, "boot": state(db, poll, user)})
+    guests = db.scalars(select(Player).where(Player.source == "local", Player.is_active.is_(True),
+                                             Player.id != user.id).order_by(Player.display_name)).all()
+    return render(request, "polls/show.html", {"poll": poll, "boot": state(db, poll, user), "guests": guests})
 
 
 @router.get("/{poll_id}/state")
-def poll_state(poll_id: int, user: Player = Depends(current_user), db: Session = Depends(get_db)):
-    return state(db, _load(db, poll_id), user)
+def poll_state(poll_id: int, as_player: int | None = None, user: Player = Depends(current_user),
+               db: Session = Depends(get_db)):
+    return state(db, _load(db, poll_id), user, _voter(db, user, as_player))
 
 
 @router.post("/{poll_id}/vote", dependencies=[Depends(verify_csrf)])
@@ -119,17 +133,18 @@ async def vote(poll_id: int, request: Request, user: Player = Depends(current_us
     if not poll.is_open:
         raise HTTPException(409, "This vote is closed.")
     data = await request.json()
+    voter = _voter(db, user, data.get("as_player"))
     option = next((o for o in poll.options if o.id == data.get("option_id")), None)
     if option is None:
         raise HTTPException(400, "Unknown option.")
-    existing = next((v for v in option.votes if v.player_id == user.id), None)
+    existing = next((v for v in option.votes if v.player_id == voter.id), None)
     if data.get("on") and existing is None:
-        option.votes.append(PollVote(player_id=user.id))
+        option.votes.append(PollVote(player_id=voter.id))
     elif not data.get("on") and existing is not None:
         option.votes.remove(existing)
     db.commit()
     db.expire_all()
-    return state(db, _load(db, poll_id), user)
+    return state(db, _load(db, poll_id), user, voter)
 
 
 @router.post("/{poll_id}/close", dependencies=[Depends(verify_csrf)])

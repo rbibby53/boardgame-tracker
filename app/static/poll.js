@@ -5,6 +5,9 @@
   const csrf = document.querySelector("input[name=csrf]").value;
   let state = JSON.parse(document.getElementById("pollBoot").textContent);
   let busy = false;
+  const asSel = document.getElementById("voteAs");
+  const asPlayer = () => (asSel && asSel.value ? Number(asSel.value) : null);
+  if (asSel) asSel.onchange = () => refresh();
 
   function render() {
     const list = document.getElementById("pollOptions");
@@ -67,7 +70,7 @@
       const r = await fetch(`/polls/${id}/vote`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, Accept: "application/json" },
-        body: JSON.stringify({ option_id: o.id, on: o.mine }),
+        body: JSON.stringify({ option_id: o.id, on: o.mine, as_player: asPlayer() }),
       });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Vote failed");
@@ -83,7 +86,8 @@
 
   async function refresh() {
     try {
-      const r = await fetch(`/polls/${id}/state`, { headers: { Accept: "application/json" } });
+      const q = asPlayer() ? `?as_player=${asPlayer()}` : "";
+      const r = await fetch(`/polls/${id}/state${q}`, { headers: { Accept: "application/json" } });
       if (!r.ok) return;
       const was = state.open;
       state = await r.json();
