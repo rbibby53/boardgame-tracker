@@ -431,7 +431,7 @@
       const isW = winners.has(pid);
       row.classList.toggle("is-winner", isW);
       const inp = row.querySelector("input.final-score");
-      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (from ${sheetOn() ? "sheet" : roundWord().toLowerCase() + "s"})` : "score";
+      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (${sheetOn() ? "sheet" : roundWord().toLowerCase() + "s"})` : "score";
       const wb = row.querySelector(".win-btn");
       if (sc === "coop") { wb.hidden = true; return; }
       wb.hidden = false;
