@@ -26,4 +26,9 @@ def test_picker_filters_and_sorts(client, db):
     # never-played games sort before played ones
     assert html.index("Mystery") < html.index("Quick")
     assert "Tonight's pick" in client.get("/pick?players=2&surprise=1").text
+    # games with no player count / length are kept but flagged
+    tight = client.get("/pick?players=9&minutes=10").text
+    assert "Mystery" in tight and "player count not set" in tight and "Quick" not in tight
+    db.delete(unknown)
+    db.commit()
     assert "No games fit" in client.get("/pick?players=9&minutes=10").text
