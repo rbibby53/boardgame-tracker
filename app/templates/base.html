@@ -29,6 +29,7 @@
       <a href="/nights" class="{{ 'on' if path.startswith('/nights') }}">Nights</a>
       <a href="/games" class="{{ 'on' if path.startswith('/games') }}">Games</a>
       <a href="/players" class="{{ 'on' if path.startswith('/players') }}">Players</a>
+      <a href="/pick" class="{{ 'on' if path.startswith('/pick') }}">Pick</a>
       {% if user.is_admin %}<a href="/admin" class="{{ 'on' if path.startswith('/admin') }}">Admin</a>{% endif %}
     </nav>
     <div class="me">

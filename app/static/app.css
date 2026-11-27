@@ -222,3 +222,5 @@ td.rank { width: 2.5rem; color: var(--muted); font-variant-numeric: tabular-nums
 .champion { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; background: var(--win-bg); border-color: color-mix(in srgb, var(--win) 35%, var(--border)); }
 .photo-grid { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 .photo-grid img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; background: var(--surface-2); }
+.cover { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; background: var(--surface-2); flex: none; }
+.cover.sm { width: 32px; height: 32px; border-radius: 6px; }

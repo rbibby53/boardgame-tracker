@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}What should we play? · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>What should we play?</h1></div>
+<form class="card" method="get" action="/pick" style="margin-bottom:1rem">
+  <div class="fields">
+    <div><label for="players">Players tonight</label><input type="number" id="players" name="players" min="1" max="20" inputmode="numeric" value="{{ f.players or '' }}"></div>
+    <div><label for="minutes">Time we have (minutes)</label><input type="number" id="minutes" name="minutes" min="5" step="5" inputmode="numeric" value="{{ f.minutes or '' }}" placeholder="any"></div>
+    <div><label for="sort">Sort by</label><select id="sort" name="sort">{% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ v }}</option>{% endfor %}</select></div>
+  </div>
+  <div class="form-actions">
+    <button class="btn">Show games</button>
+    <button class="btn primary" name="surprise" value="1">🎲 Pick one for us</button>
+  </div>
+</form>
+
+{% if chosen %}
+<div class="card champion" style="margin-bottom:1rem">
+  {% if chosen.game.has_cover %}<img class="cover" src="/covers/{{ chosen.game.id }}" alt="">{% endif %}
+  <div><div class="small muted">Tonight's pick</div><h2 style="margin:.1rem 0"><a href="/games/{{ chosen.game.id }}">{{ chosen.game.name }}</a></h2>
+    <div class="small muted">{% if chosen.last %}Last played {{ chosen.last|dt("%b %-d, %Y") }}{% else %}Never played!{% endif %}{% if chosen.length %} · ~{{ chosen.length }} min{% endif %}</div></div>
+  <span class="spacer"></span>
+  <a class="btn primary" href="/plays/new?game={{ chosen.game.id }}">Log it</a>
+</div>
+{% endif %}
+
+<div class="card flush">
+  {% if results %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Game</th><th class="num">Players</th><th class="num">Length</th><th class="num">Plays</th><th class="num">Last played</th></tr></thead>
+    <tbody>{% for r in results %}{% set g = r.game %}
+      <tr><td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<span class="n"><strong>{{ g.name }}</strong></span></a>
+          {% for n in r.notes %}<span class="tag">{{ n }}</span> {% endfor %}</td>
+        <td class="num nowrap">{% if g.min_players or g.max_players %}{{ g.min_players or "?" }}{% if g.max_players != g.min_players %}–{{ g.max_players or "?" }}{% endif %}{% else %}—{% endif %}</td>
+        <td class="num nowrap" title="{{ r.length_src or '' }}">{{ ("~" ~ r.length ~ "m") if r.length else "—" }}</td>
+        <td class="num">{{ r.plays }}</td>
+        <td class="num nowrap small">{{ r.last|dt("%b %-d, %Y") if r.last else "never" }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">{{ "No games fit. Try more time or a different player count." if searched else "Add some games first." }}</div>
+  {% endif %}
+</div>
+<p class="small muted">Length uses the box play time when set, otherwise the average of your logged plays.</p>
+{% endblock %}
