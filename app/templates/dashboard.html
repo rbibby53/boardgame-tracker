@@ -25,6 +25,7 @@
       <div class="seg" role="tablist">
         <label><input type="radio" name="lb" value="recent" checked onchange="GN.tab('lb', this.value)">90 days</label>
         <label><input type="radio" name="lb" value="all" onchange="GN.tab('lb', this.value)">All time</label>
+        <label><input type="radio" name="lb" value="rating" onchange="GN.tab('lb', this.value)">Rating</label>
       </div>
     </div>
     {% for key, board in [("recent", board_recent), ("all", board_all)] %}
@@ -41,7 +42,21 @@
       {% else %}<div class="empty">Nothing here yet.</div>{% endif %}
     </div>
     {% endfor %}
-    <p class="small muted" style="padding:0 1rem">Competitive games only. Co-op results show on each game's page.</p>
+    <div class="table-wrap" data-tab="lb" data-key="rating" hidden>
+      {% if board_rating %}
+      <table>
+        <thead><tr><th></th><th>Player</th><th class="num">Rating</th><th class="num">Rated plays</th></tr></thead>
+        <tbody>
+        {% for p in board_rating %}
+          <tr><td class="rank">{{ loop.index }}</td><td>{{ who(p) }}</td>
+            <td class="num">{{ rt.overall_for(p.id) }}{% if rt.provisional(p.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>
+            <td class="num">{{ rt.rated_plays.get(p.id, 0) }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<div class="empty">Nothing here yet.</div>{% endif %}
+    </div>
+    <p class="small muted" style="padding:0 1rem">Competitive games only. Co-op results show on each game's page. Rating is an OpenSkill skill estimate that weighs who you beat; everyone starts at 1000.</p>
   </section>
 </div>
 

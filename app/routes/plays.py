@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, selectinload
 from ..auth import current_user, verify_csrf
 from ..config import get_settings
 from ..db import get_db
-from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore
+from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore, utcnow
 from ..scoring import PlayPayload, compute
 from ..stats import color_for
 from ..templating import flash, render
@@ -152,6 +152,7 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
     play.winners_manual = payload.winners_manual and game.scoring != "coop"
     if play.created_by_id is None:
         play.created_by_id = user.id
+    play.updated_at = utcnow()  # seats/rounds may change without touching the play row
 
     play.seats.clear()
     play.rounds.clear()

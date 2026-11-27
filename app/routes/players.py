@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import stats
+from .. import ratings, stats
 from ..auth import current_user, verify_csrf
 from ..db import get_db
 from ..models import Player, PlaySeat
@@ -66,8 +66,12 @@ def show_player(player_id: int, request: Request, user: Player = Depends(current
     seats = [s for pl in plays for s in pl.seats if s.player_id == player_id]
     comp = [s for s in seats if s.play.game.scoring != "coop"]
     coop = [s for s in seats if s.play.game.scoring == "coop"]
+    rt = ratings.table(db)
     return render(request, "players/show.html", {
         "p": p,
+        "rt": rt,
+        "rating": rt.overall_for(p.id),
+        "rating_series": ratings.series(rt, plays, only_player=player_id),
         "color": stats.color_for(p),
         "can_edit": _can_edit(user, p),
         "summary": {

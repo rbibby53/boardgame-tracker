@@ -8,7 +8,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .. import stats
+from .. import ratings, stats
 from ..authentik import SyncError, run_sync
 from ..auth import current_user, require_admin, verify_csrf
 from ..config import get_settings
@@ -93,6 +93,7 @@ def merge_guest(request: Request, guest_id: int = Form(...), target_id: int = Fo
     db.execute(update(Play).where(Play.created_by_id == guest.id).values(created_by_id=target.id))
     db.delete(guest)
     db.commit()
+    ratings.invalidate()
     flash(request, f"Merged {guest.display_name} into {target.display_name}.")
     return RedirectResponse("/admin", status_code=303)
 

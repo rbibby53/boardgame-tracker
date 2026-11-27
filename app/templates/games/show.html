@@ -36,11 +36,13 @@
     {% if board %}
     <div class="table-wrap"><table>
       <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Plays</th><th class="num">Win %</th>
-        {% if game.scoring in ("high", "low") %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}</tr></thead>
+        {% if game.scoring in ("high", "low") %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}
+        {% if game.scoring != "coop" %}<th class="num">Rating</th>{% endif %}</tr></thead>
       <tbody>
       {% for r in board %}
         <tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td><td class="num">{{ r.win_rate|pct }}</td>
-          {% if game.scoring in ("high", "low") %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}</tr>
+          {% if game.scoring in ("high", "low") %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}
+          {% if game.scoring != "coop" %}{% set gr = rt.game_for(game.id, r.player.id) %}<td class="num">{{ gr if gr else "—" }}{% if gr and rt.provisional(r.player.id, game.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>{% endif %}</tr>
       {% endfor %}
       </tbody>
     </table></div>
@@ -74,6 +76,12 @@
   <h2>Scores over time</h2>
   {{ chart("scoreChart", score_series, "score") }}
   <p class="small muted">★ marks a win. Click a point to open that play.</p>
+</section>
+{% endif %}
+{% if rating_series %}
+<section class="card" style="margin-top:1rem">
+  <h2>{{ game.name }} rating over time</h2>
+  {{ chart("ratingChart", rating_series, "rating") }}
 </section>
 {% endif %}
 {% if wins_series and game.scoring != "coop" %}

@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import stats
+from .. import ratings, stats
 from ..auth import current_user, require_admin, verify_csrf
 from ..db import get_db
 from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player
@@ -118,8 +118,11 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
     if game is None:
         raise HTTPException(404)
     plays = stats.load_plays(db, game_id=game_id)
+    rt = ratings.table(db)
     return render(request, "games/show.html", {
         "game": game,
+        "rt": rt,
+        "rating_series": ratings.series(rt, plays, game_id=game_id),
         "board": stats.leaderboard(plays, include_coop=True),
         "records": stats.records(game, plays),
         "recent": list(reversed(plays[-10:])),

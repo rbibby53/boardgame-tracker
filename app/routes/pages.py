@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import stats
+from .. import ratings, stats
 from ..auth import current_user
 from ..db import get_db
 from ..config import get_settings
@@ -23,7 +23,12 @@ def dashboard(request: Request, user: Player = Depends(current_user), db: Sessio
     recent = [p for p in all_plays if p.played_at >= recent_cut]
     my = [p for p in all_plays if any(s.player_id == user.id for s in p.seats)]
     my_wins = sum(1 for p in my for s in p.seats if s.player_id == user.id and s.is_winner)
+    rt = ratings.table(db, all_plays)
+    rated = [p for p in db.scalars(select(Player)).all() if p.id in rt.overall and p.is_active]
+    board_rating = sorted(rated, key=lambda p: -rt.overall_for(p.id))[:10]
     return render(request, "dashboard.html", {
+        "rt": rt,
+        "board_rating": board_rating,
         "latest": list(reversed(all_plays[-8:])),
         "board_all": stats.leaderboard(all_plays)[:10],
         "board_recent": stats.leaderboard(recent)[:10],
