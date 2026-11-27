@@ -15,7 +15,7 @@
     <tbody>
     {% for g, n, last in rows %}
       <tr>
-        <td><a href="/games/{{ g.id }}"><strong>{{ g.name }}</strong></a>
+        <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
           {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}</td>
         <td class="small muted">{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}</td>
         <td class="num">{{ n }}</td>

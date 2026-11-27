@@ -51,6 +51,28 @@
   </section>
 </div>
 
+<section class="card" style="margin-top:1rem" id="photos">
+  <div class="row" style="margin-bottom:.6rem"><h2 style="margin:0">Photos</h2></div>
+  {% if play.photos %}
+  <div class="photo-grid">{% for ph in play.photos %}
+    <figure class="photo">
+      <a href="/photos/{{ ph.key }}" target="_blank" rel="noopener"><img src="/photos/{{ ph.key }}/thumb" alt="Photo {{ loop.index }}" loading="lazy"></a>
+      {% if can_edit or ph.uploaded_by_id == user.id %}
+      <form method="post" action="/photos/{{ ph.key }}/delete" onsubmit="return confirm('Delete this photo?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm ghost" title="Delete photo">✕</button></form>
+      {% endif %}
+    </figure>
+  {% endfor %}</div>
+  {% elif not can_edit %}<p class="muted small">No photos.</p>{% endif %}
+  {% if can_edit %}
+  <form method="post" action="/plays/{{ play.id }}/photos" enctype="multipart/form-data" class="row" style="margin-top:.75rem">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="file" name="photos" accept="image/*" multiple required>
+    <button class="btn sm">Upload</button>
+    <span class="hint">Final board, the winner's smug face… Location data is removed.</span>
+  </form>
+  {% endif %}
+</section>
+
 {% if play.category_scores %}
 {% set sheet = {} %}{% for cs in play.category_scores %}{% set _ = sheet.setdefault(cs.category_id, {}).update({cs.player_id: cs.score}) %}{% endfor %}
 <section class="card flush" style="margin-top:1rem">

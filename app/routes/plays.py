@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from .. import notify
+from .. import media, notify
 from ..auth import current_user, verify_csrf
 from ..config import get_settings
 from ..db import get_db
@@ -265,7 +265,10 @@ def delete_play(play_id: int, request: Request, user: Player = Depends(current_u
     play = _get_play(db, play_id)
     if not can_edit(user, play):
         raise HTTPException(403)
+    keys = [ph.key for ph in play.photos]
     db.delete(play)
     db.commit()
+    for k in keys:
+        media.delete_photo(k)
     flash(request, "Play deleted.")
     return RedirectResponse("/plays", status_code=303)

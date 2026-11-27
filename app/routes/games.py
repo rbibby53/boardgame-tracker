@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import ratings, stats
+from .. import media, ratings, stats
 from ..auth import current_user, require_admin, verify_csrf
 from ..db import get_db
 from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player
@@ -182,5 +182,6 @@ def delete_game(game_id: int, request: Request, user: Player = Depends(require_a
         return RedirectResponse(f"/games/{game.id}", status_code=303)
     db.delete(game)
     db.commit()
+    media.delete_cover(game_id)
     flash(request, "Game deleted.")
     return RedirectResponse("/games", status_code=303)

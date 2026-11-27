@@ -12,7 +12,7 @@ from . import auth
 from .authentik import run_sync
 from .config import get_settings
 from .db import SessionLocal
-from .routes import admin, games, nights, pages, picker, players, plays
+from .routes import admin, games, media, nights, pages, picker, players, plays
 from .templating import render
 
 log = logging.getLogger("boardgames")
@@ -72,7 +72,7 @@ def create_app() -> FastAPI:
     )
     app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
-    for r in (auth.router, pages.router, plays.router, games.router, players.router, nights.router, picker.router, admin.router):
+    for r in (auth.router, pages.router, plays.router, games.router, players.router, nights.router, picker.router, media.router, admin.router):
         app.include_router(r)
 
     @app.exception_handler(auth.LoginRequired)

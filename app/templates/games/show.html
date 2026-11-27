@@ -3,10 +3,14 @@
 {% block title %}{{ game.name }} · {{ settings.app_name }}{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>
+  <div class="row" style="gap:1rem">
+    {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
+    <div>
     <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}</h1>
     <p class="muted">{{ game.scoring_label }}{% if game.min_players %} · {{ game.min_players }}{% if game.max_players and game.max_players != game.min_players %}–{{ game.max_players }}{% endif %} players{% endif %}
+      {% if game.year %} · {{ game.year }}{% endif %}{% if game.play_time_min %} · ~{{ game.play_time_min }} min{% endif %}
       {% if game.bgg_id %} · <a href="https://boardgamegeek.com/boardgame/{{ game.bgg_id }}" rel="noopener noreferrer" target="_blank">BGG</a>{% endif %}</p>
+    </div>
   </div>
   <div class="row">
     <a class="btn" href="/games/{{ game.id }}/edit">Edit</a>

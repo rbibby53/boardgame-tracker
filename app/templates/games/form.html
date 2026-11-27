@@ -41,4 +41,13 @@
     <button class="btn primary">{{ "Save" if game else "Add game" }}</button>
   </div>
 </form>
+{% if game %}
+<form method="post" action="/games/{{ game.id }}/cover" enctype="multipart/form-data" class="card row" style="margin-top:1rem">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
+  <div class="stack" style="flex:1"><label for="cover" style="margin:0">Cover image</label>
+    <div class="row"><input type="file" id="cover" name="cover" accept="image/*"><button class="btn sm">Upload</button>
+    {% if game.has_cover %}<button class="btn sm ghost" name="remove" value="1">Remove</button>{% endif %}</div></div>
+</form>
+{% endif %}
 {% endblock %}

@@ -12,3 +12,5 @@ pydantic==2.14.4
 pydantic-settings==2.16.3
 psycopg[binary]==3.3.9
 openskill==6.2.0
+pillow==13.0.0
+pillow-heif==1.9.0
