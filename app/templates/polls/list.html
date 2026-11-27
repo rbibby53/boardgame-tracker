@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Votes · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Votes</h1><p class="muted">Start a new one from <a href="/pick">What should we play?</a></p></div></div>
+<div class="card flush">
+{% if polls %}
+<ul class="plays">{% for p in polls %}
+  <li><a class="item" href="/polls/{{ p.id }}">
+    <span class="g">{{ p.title }} {% if p.is_open %}<span class="tag win">open</span>{% endif %}</span>
+    <span class="d nowrap">{{ p.created_at|utc("%b %-d, %Y") }}</span>
+    <span class="ppl"><span>{{ p.options|length }} games</span>{% if p.winner %}<span class="w">🏆 {{ p.winner.name }}</span>{% endif %}</span>
+  </a></li>
+{% endfor %}</ul>
+{% else %}<div class="empty">No votes yet.</div>{% endif %}
+</div>
+{% endblock %}

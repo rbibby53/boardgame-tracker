@@ -240,3 +240,20 @@ a.badge:hover { background: var(--surface-2); text-decoration: none; }
   .score-grid input[type=number] { min-width: 50px; padding: .4rem .3rem; }
   .score-grid th, .score-grid td { padding: .3rem .2rem; }
 }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.poll-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .5rem; }
+.poll-btn {
+  width: 100%; display: flex; gap: .75rem; align-items: center; text-align: left; font: inherit; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: .7rem .85rem; cursor: pointer;
+}
+.poll-btn:disabled { cursor: default; }
+.poll-btn:not(:disabled):hover { background: var(--surface-2); }
+.poll-check { width: 1.6rem; height: 1.6rem; flex: none; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; font-weight: 800; color: var(--accent-ink); }
+.poll-opt.mine .poll-check { background: var(--accent); border-color: var(--accent); }
+.poll-opt.mine .poll-btn { border-color: var(--accent); }
+.poll-opt.leading .poll-btn { box-shadow: inset 3px 0 0 var(--win); }
+.poll-opt.won .poll-btn { background: var(--win-bg); }
+.poll-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.poll-bar { height: 6px; border-radius: 999px; background: var(--surface-2); position: relative; overflow: hidden; margin-top: .2rem; }
+.poll-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--w, 0%); background: var(--accent); border-radius: inherit; transition: width .3s; }
+.poll-count { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }

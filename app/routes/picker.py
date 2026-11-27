@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import Game, Play, Player
+from ..models import Game, Play, Player, Poll
 from ..templating import render
 
 router = APIRouter()
@@ -23,13 +23,18 @@ def _int(v: str | None) -> int | None:
 
 @router.get("/pick")
 def pick(request: Request, players: str | None = None, minutes: str | None = None, sort: str = "stale",
-         surprise: int = 0, user: Player = Depends(current_user), db: Session = Depends(get_db)):
+         shelf: str | None = None, surprise: int = 0, user: Player = Depends(current_user),
+         db: Session = Depends(get_db)):
     n, limit = _int(players), _int(minutes)
     sort = sort if sort in SORTS else "stale"
-    rows = db.execute(
-        select(Game, func.count(Play.id), func.max(Play.played_at), func.avg(Play.duration_min))
-        .outerjoin(Play).where(Game.archived.is_(False)).group_by(Game.id)
-    ).all()
+    any_owned = bool(db.scalar(select(func.count(Game.id)).where(Game.owned.is_(True), Game.archived.is_(False))))
+    if shelf not in ("own", "all"):
+        shelf = "own" if any_owned else "all"
+    q = (select(Game, func.count(Play.id), func.max(Play.played_at), func.avg(Play.duration_min))
+         .outerjoin(Play).where(Game.archived.is_(False)).group_by(Game.id))
+    if shelf == "own":
+        q = q.where(Game.owned.is_(True))
+    rows = db.execute(q).all()
 
     results = []
     for g, count, last, avg_dur in rows:
@@ -56,7 +61,11 @@ def pick(request: Request, players: str | None = None, minutes: str | None = Non
         random.shuffle(results)
 
     chosen = random.choice(results) if surprise and results else None
+    open_polls = db.scalars(select(Poll).where(Poll.closed_at.is_(None)).order_by(Poll.created_at.desc())
+                            .limit(5)).all()
     return render(request, "pick.html", {
-        "results": results, "chosen": chosen, "sorts": SORTS,
-        "f": {"players": n, "minutes": limit, "sort": sort}, "searched": players is not None or minutes is not None,
+        "results": results, "chosen": chosen, "sorts": SORTS, "any_owned": any_owned, "open_polls": open_polls,
+        "f": {"players": n, "minutes": limit, "sort": sort, "shelf": shelf},
+        "searched": players is not None or minutes is not None,
+        "vote_title": "What should we play" + (f" ({n} players)" if n else "") + "?",
     })

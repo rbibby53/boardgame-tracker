@@ -80,6 +80,7 @@ class Game(Base):
     year: Mapped[int | None] = mapped_column(Integer)
     play_time_min: Mapped[int | None] = mapped_column(Integer)  # box play time, used by the picker
     has_cover: Mapped[bool] = mapped_column(Boolean, default=False)  # cover image in DATA_DIR/covers
+    owned: Mapped[bool] = mapped_column(Boolean, default=False)  # on our shelf (manual or BGG collection)
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
@@ -240,6 +241,63 @@ class PlayPhoto(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     play: Mapped[Play] = relationship(back_populates="photos")
+
+
+class Poll(Base):
+    """A "what should we play?" vote. Approval voting: each voter ticks every game they'd play."""
+
+    __tablename__ = "polls"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(150))
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("players.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    winner_game_id: Mapped[int | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"))
+
+    created_by: Mapped[Player | None] = relationship()
+    winner: Mapped[Game | None] = relationship()
+    options: Mapped[list["PollOption"]] = relationship(
+        back_populates="poll", cascade="all, delete-orphan", order_by="PollOption.id"
+    )
+
+    @property
+    def is_open(self) -> bool:
+        return self.closed_at is None
+
+
+class PollOption(Base):
+    __tablename__ = "poll_options"
+    __table_args__ = (UniqueConstraint("poll_id", "game_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    poll_id: Mapped[int] = mapped_column(ForeignKey("polls.id", ondelete="CASCADE"), index=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"))
+
+    poll: Mapped[Poll] = relationship(back_populates="options")
+    game: Mapped[Game] = relationship()
+    votes: Mapped[list["PollVote"]] = relationship(back_populates="option", cascade="all, delete-orphan")
+
+
+class PollVote(Base):
+    __tablename__ = "poll_votes"
+    __table_args__ = (UniqueConstraint("option_id", "player_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    option_id: Mapped[int] = mapped_column(ForeignKey("poll_options.id", ondelete="CASCADE"), index=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id", ondelete="CASCADE"))
+
+    option: Mapped[PollOption] = relationship(back_populates="votes")
+    player: Mapped[Player] = relationship()
+
+
+class AppSetting(Base):
+    """Small admin-editable settings (e.g. the BGG username for collection sync)."""
+
+    __tablename__ = "app_settings"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str | None] = mapped_column(Text)
 
 
 class SyncLog(Base):

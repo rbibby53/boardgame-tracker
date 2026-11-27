@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block title %}What should we play? · {{ settings.app_name }}{% endblock %}
 {% block content %}
-<div class="page-head"><h1>What should we play?</h1></div>
+<div class="page-head"><h1>What should we play?</h1><a class="btn sm ghost" href="/polls">Past votes</a></div>
+{% for p in open_polls %}
+<a class="card champion" href="/polls/{{ p.id }}" style="margin-bottom:.75rem;color:inherit;text-decoration:none">
+  <span style="font-size:1.5rem">🗳️</span><div><strong>{{ p.title }}</strong><div class="small muted">Vote open: tap to vote</div></div>
+</a>
+{% endfor %}
 <form class="card" method="get" action="/pick" style="margin-bottom:1rem">
   <div class="fields">
     <div><label for="players">Players tonight</label><input type="number" id="players" name="players" min="1" max="20" inputmode="numeric" value="{{ f.players or '' }}"></div>
     <div><label for="minutes">Time we have (minutes)</label><input type="number" id="minutes" name="minutes" min="5" step="5" inputmode="numeric" value="{{ f.minutes or '' }}" placeholder="any"></div>
     <div><label for="sort">Sort by</label><select id="sort" name="sort">{% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ v }}</option>{% endfor %}</select></div>
+    {% if any_owned %}<div><label for="shelf">Games</label><select id="shelf" name="shelf">
+      <option value="own" {{ 'selected' if f.shelf == 'own' }}>On our shelf</option>
+      <option value="all" {{ 'selected' if f.shelf == 'all' }}>Everything we've logged</option></select></div>{% endif %}
   </div>
   <div class="form-actions">
     <button class="btn">Show games</button>
@@ -24,12 +32,18 @@
 </div>
 {% endif %}
 
-<div class="card flush">
+<form class="card flush" method="post" action="/polls" id="voteForm">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
   {% if results %}
+  <div class="row" style="padding:.75rem 1rem">
+    <input type="text" name="title" value="{{ vote_title }}" maxlength="150" style="flex:1;min-width:180px" aria-label="Vote title">
+    <button class="btn primary">🗳️ Start a vote with ticked games</button>
+  </div>
   <div class="table-wrap"><table>
-    <thead><tr><th>Game</th><th class="num">Players</th><th class="num">Length</th><th class="num">Plays</th><th class="num">Last played</th></tr></thead>
+    <thead><tr><th style="width:2rem"><span class="sr-only">Vote</span></th><th>Game</th><th class="num">Players</th><th class="num">Length</th><th class="num">Plays</th><th class="num">Last played</th></tr></thead>
     <tbody>{% for r in results %}{% set g = r.game %}
-      <tr><td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<span class="n"><strong>{{ g.name }}</strong></span></a>
+      <tr><td><input type="checkbox" name="game_ids" value="{{ g.id }}" aria-label="Include {{ g.name }} in the vote" {{ 'checked' if loop.index <= 6 }}></td>
+        <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<span class="n"><strong>{{ g.name }}</strong></span></a>
           {% for n in r.notes %}<span class="tag">{{ n }}</span> {% endfor %}</td>
         <td class="num nowrap">{% if g.min_players or g.max_players %}{{ g.min_players or "?" }}{% if g.max_players != g.min_players %}–{{ g.max_players or "?" }}{% endif %}{% else %}—{% endif %}</td>
         <td class="num nowrap" title="{{ r.length_src or '' }}">{{ ("~" ~ r.length ~ "m") if r.length else "—" }}</td>
@@ -40,6 +54,6 @@
   {% else %}
   <div class="empty">{{ "No games fit. Try more time or a different player count." if searched else "Add some games first." }}</div>
   {% endif %}
-</div>
+</form>
 <p class="small muted">Length uses the box play time when set, otherwise the average of your logged plays.</p>
 {% endblock %}
