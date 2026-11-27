@@ -33,6 +33,8 @@ It ships as one container, with SQLite by default (Postgres optional), no extern
 - **Game nights**: plays are grouped by evening, with a champion of the night, clean sweeps, notes and photos.
 - **Streaks, rivals and achievements**: hot streaks, nemesis and favorite victim, "always the bridesmaid", plus dated achievements per player.
 - **What should we play?**: filter by player count and time, sort by least recently played or fewest plays, or let it pick for you.
+- **Vote on what to play**: start a vote from the picker's list. Everyone taps every game they'd play, and results update live on each phone. Ties go to the game played longest ago. You can vote on behalf of guests who don't have an account.
+- **BGG collection sync**: pull the games you own on BoardGameGeek into the app (preview first), fill in missing details and covers, and flag games you've sold. The picker then defaults to games on your shelf.
 - **Photos**: attach board photos to a play. Location and other metadata are stripped, and iPhone HEIC is supported.
 - **BoardGameGeek**: look up a game to auto-fill player counts, play time, year and cover art. You can also import your BGG play history.
 - **Installable app (PWA)**: add it to your phone's home screen. "Log a play" works offline and keeps a draft until you're back online.
@@ -142,6 +144,17 @@ Imports are under **Admin → Import plays**:
 - **BGG plays XML file**, or a **BGG username** (needs `BGG_TOKEN`).
 
 You always get a preview before anything is written. Players are matched by username, then by name, and unknown people become guests. Duplicates (same day, game and players) are skipped, so re-running an import is safe.
+
+## BGG collection sync
+
+Go to **Admin → Sync BGG collection** and enter your BGG username (needs `BGG_TOKEN`). The sync only looks at board games marked **Own**; expansions are skipped. The preview shows exactly what will happen:
+
+- **New games** are added as "highest score wins". Change co-op or win/loss games afterwards.
+- **Existing games** (matched by BGG ID, then name) only get *blank* fields filled in. Your edits are kept.
+- **Games that left the collection** can be marked "not on our shelf" (history kept), archived, or left alone.
+- **Covers** download in the background.
+
+The first fetch can take up to a minute while BGG prepares the collection. If it times out, run it again; BGG caches the result. Each game also has an **On our shelf** checkbox you can set by hand.
 
 ## Installing on your phone
 

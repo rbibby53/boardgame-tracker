@@ -35,29 +35,34 @@ def _client() -> httpx.Client:
     )
 
 
-def _get(path: str, params: dict, *, sleep=time.sleep) -> ET.Element:
+def _get(path: str, params: dict, *, sleep=time.sleep, delays=(2, 4, 8, 16)) -> ET.Element:
     if not enabled():
         raise BggError("BoardGameGeek lookup isn't configured (BGG_TOKEN).")
-    delay = 2.0
+    waits = list(delays)
     with _client() as c:
-        for _ in range(5):
+        while True:
             try:
                 r = c.get(f"{BASE}/{path}", params=params)
             except httpx.HTTPError as e:
                 raise BggError(f"Couldn't reach BoardGameGeek: {e}") from e
             if r.status_code in (202, 429, 503):  # queued / rate limited: back off and retry
-                sleep(delay)
-                delay *= 2
+                if not waits:
+                    break
+                sleep(waits.pop(0))
                 continue
             if r.status_code in (401, 403):
                 raise BggError("BoardGameGeek rejected the token. Check BGG_TOKEN.")
             if r.status_code != 200:
                 raise BggError(f"BoardGameGeek returned HTTP {r.status_code}.")
             try:
-                return SafeET.fromstring(r.content)
+                root = SafeET.fromstring(r.content)
             except (ET.ParseError, DefusedXmlException) as e:
                 raise BggError("BoardGameGeek sent a response we couldn't read.") from e
-    raise BggError("BoardGameGeek is busy. Try again in a minute.")
+            err = root.find(".//error/message") if root.tag == "errors" else None
+            if err is not None:
+                raise BggError(f"BoardGameGeek: {err.text}")
+            return root
+    raise BggError("BoardGameGeek is still preparing that. Try again in a minute.")
 
 
 def _val(item: ET.Element, tag: str) -> str | None:
@@ -122,3 +127,43 @@ def fetch_image(url: str, max_bytes: int = 15_000_000) -> bytes:
             if len(data) > max_bytes:
                 raise BggError("Cover image is too large.")
     return data
+
+
+def collection(username: str, **kw) -> list[dict]:
+    """Board games (not expansions) marked as owned in a BGG user's collection."""
+    username = username.strip()
+    if not username:
+        raise BggError("Enter a BoardGameGeek username.")
+    kw.setdefault("delays", (2, 3, 5, 8, 12, 15))  # first request is usually 202 while BGG builds it
+    root = _get("collection", {"username": username, "own": "1", "subtype": "boardgame",
+                               "excludesubtype": "boardgameexpansion", "stats": "1"}, **kw)
+    out: dict[int, dict] = {}
+    for item in root.findall("item"):
+        oid = item.get("objectid") or ""
+        if not oid.isdigit() or item.get("subtype", "boardgame") != "boardgame":
+            continue
+        status = item.find("status")
+        if status is not None and status.get("own") not in (None, "1"):
+            continue
+        stats = item.find("stats")
+        st = stats.attrib if stats is not None else {}
+        name = (item.findtext("name") or "").strip()
+        if not name:
+            continue
+        entry = {
+            "bgg_id": int(oid),
+            "name": name[:200],
+            "year": _int((item.findtext("yearpublished") or "").strip()),
+            "min_players": _int(st.get("minplayers")),
+            "max_players": _int(st.get("maxplayers")),
+            "play_time_min": _int(st.get("playingtime")) or _int(st.get("maxplaytime")),
+            "image": (item.findtext("image") or item.findtext("thumbnail") or "").strip() or None,
+        }
+        prev = out.get(int(oid))
+        if prev is None:
+            out[int(oid)] = entry
+        else:  # another copy of the same game: only fill gaps
+            for k, v in entry.items():
+                if prev.get(k) is None and v is not None:
+                    prev[k] = v
+    return sorted(out.values(), key=lambda g: g["name"].lower())

@@ -106,6 +106,7 @@ async def _read_game_form(request: Request, game: Game, db: Session) -> str | No
     game.name = name
     game.scoring = scoring
     game.uses_rounds = form.get("uses_rounds") == "on"
+    game.owned = form.get("owned") == "on"
     game.round_label = (form.get("round_label") or "").strip()[:40] or None
     try:
         pt = _int_or_none(form.get("play_time_min"))
@@ -119,16 +120,16 @@ async def _read_game_form(request: Request, game: Game, db: Session) -> str | No
 
 
 @router.get("")
-def list_games(request: Request, archived: bool = False, user: Player = Depends(current_user),
+def list_games(request: Request, archived: bool = False, shelf: bool = False, user: Player = Depends(current_user),
                db: Session = Depends(get_db)):
-    rows = db.execute(
-        select(Game, func.count(Play.id), func.max(Play.played_at))
-        .outerjoin(Play)
-        .where(Game.archived.is_(archived))
-        .group_by(Game.id)
-        .order_by(Game.name)
-    ).all()
-    return render(request, "games/list.html", {"rows": rows, "archived": archived})
+    q = (select(Game, func.count(Play.id), func.max(Play.played_at)).outerjoin(Play)
+         .where(Game.archived.is_(archived)).group_by(Game.id).order_by(Game.name))
+    if shelf:
+        q = q.where(Game.owned.is_(True))
+    rows = db.execute(q).all()
+    any_owned = bool(db.scalar(select(func.count(Game.id)).where(Game.owned.is_(True))))
+    return render(request, "games/list.html", {"rows": rows, "archived": archived, "shelf": shelf,
+                                               "any_owned": any_owned})
 
 
 @router.get("/new")

@@ -4,6 +4,7 @@
 <div class="page-head">
   <div><h1>{{ "Archived games" if archived else "Games" }}</h1></div>
   <div class="row">
+    {% if any_owned and not archived %}<a class="btn sm ghost" href="/games{{ '' if shelf else '?shelf=true' }}">{{ "All games" if shelf else "On our shelf" }}</a>{% endif %}
     <a class="btn sm ghost" href="/games{{ '' if archived else '?archived=true' }}">{{ "Active games" if archived else "Archived" }}</a>
     <a class="btn primary" href="/games/new">+ Add game</a>
   </div>
@@ -17,7 +18,7 @@
       <tr>
         <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
           {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}</td>
-        <td class="small muted">{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}</td>
+        <td class="small muted">{% if g.owned %}<span class="tag" title="On our shelf">owned</span> {% endif %}{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}</td>
         <td class="num">{{ n }}</td>
         <td class="num small muted nowrap">{{ last|dt("%b %-d, %Y") if last else "—" }}</td>
         <td class="num"><a class="btn sm" href="/plays/new?game={{ g.id }}">Log</a></td>
