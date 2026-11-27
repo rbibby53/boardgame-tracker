@@ -1,7 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -76,11 +77,21 @@ class Game(Base):
     min_players: Mapped[int | None] = mapped_column(Integer)
     max_players: Mapped[int | None] = mapped_column(Integer)
     bgg_id: Mapped[int | None] = mapped_column(Integer)
+    year: Mapped[int | None] = mapped_column(Integer)
+    play_time_min: Mapped[int | None] = mapped_column(Integer)  # box play time, used by the picker
+    has_cover: Mapped[bool] = mapped_column(Boolean, default=False)  # cover image in DATA_DIR/covers
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     plays: Mapped[list["Play"]] = relationship(back_populates="game")
+    categories: Mapped[list["GameCategory"]] = relationship(
+        back_populates="game", cascade="all, delete-orphan", order_by="GameCategory.position"
+    )
+
+    @property
+    def active_categories(self) -> list["GameCategory"]:
+        return [c for c in self.categories if not c.archived]
 
     @property
     def scoring_label(self) -> str:
@@ -112,6 +123,12 @@ class Play(Base):
     )
     rounds: Mapped[list["Round"]] = relationship(
         back_populates="play", cascade="all, delete-orphan", order_by="Round.number"
+    )
+    category_scores: Mapped[list["CategoryScore"]] = relationship(
+        back_populates="play", cascade="all, delete-orphan"
+    )
+    photos: Mapped[list["PlayPhoto"]] = relationship(
+        back_populates="play", cascade="all, delete-orphan", order_by="PlayPhoto.id"
     )
 
     @property
@@ -169,6 +186,60 @@ class RoundScore(Base):
 
     round: Mapped[Round] = relationship(back_populates="scores")
     player: Mapped[Player] = relationship()
+
+
+class GameCategory(Base):
+    """A line on a game's score sheet (e.g. 7 Wonders: Military, Coins, Science)."""
+
+    __tablename__ = "game_categories"
+    __table_args__ = (UniqueConstraint("game_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)  # kept for history, hidden for new plays
+
+    game: Mapped[Game] = relationship(back_populates="categories")
+
+
+class CategoryScore(Base):
+    __tablename__ = "category_scores"
+    __table_args__ = (UniqueConstraint("play_id", "category_id", "player_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    play_id: Mapped[int] = mapped_column(ForeignKey("plays.id", ondelete="CASCADE"), index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("game_categories.id", ondelete="RESTRICT"), index=True)
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id", ondelete="RESTRICT"))
+    score: Mapped[float] = mapped_column(Float)
+
+    play: Mapped[Play] = relationship(back_populates="category_scores")
+    category: Mapped[GameCategory] = relationship()
+
+
+class GameNight(Base):
+    """Optional title/notes for an evening. Plays are grouped into nights by date, not by FK."""
+
+    __tablename__ = "game_nights"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    night_date: Mapped[date] = mapped_column(Date, unique=True)
+    title: Mapped[str | None] = mapped_column(String(150))
+    notes: Mapped[str | None] = mapped_column(Text)
+
+
+class PlayPhoto(Base):
+    __tablename__ = "play_photos"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    play_id: Mapped[int] = mapped_column(ForeignKey("plays.id", ondelete="CASCADE"), index=True)
+    key: Mapped[str] = mapped_column(String(64), unique=True)  # random file stem in DATA_DIR/photos
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    uploaded_by_id: Mapped[int | None] = mapped_column(ForeignKey("players.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    play: Mapped[Play] = relationship(back_populates="photos")
 
 
 class SyncLog(Base):

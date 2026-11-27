@@ -20,6 +20,10 @@
       scores: Object.fromEntries(Object.entries(r.scores || {}).map(([k, v]) => [Number(k), v])),
       won: (r.won || []).map(Number),
     })),
+    categories: Object.fromEntries(Object.entries(init.categories || {}).map(([cid, row]) => [
+      Number(cid), Object.fromEntries(Object.entries(row || {}).map(([k, v]) => [Number(k), v])),
+    ])),
+    use_sheet: init.use_sheet ?? Object.keys(init.categories || {}).length > 0,
     winners_manual: !!init.winners_manual,
     coop_won: !!init.coop_won,
     use_rounds: init.use_rounds ?? (init.rounds || []).length > 0,
@@ -33,6 +37,11 @@
   const roundWord = () => (game() ? game().round_label : "Round");
   const num = (v) => (v === "" || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v));
   const fmt = (v) => (v === null ? "" : Number.isInteger(v) ? String(v) : String(+v.toFixed(2)));
+
+  const sheetAllowed = () => game() && ["high", "low"].includes(scoring()) && game().categories.some((c) => !c.archived || state.categories[c.id]);
+  const sheetOn = () => state.use_sheet && sheetAllowed();
+  const sheetCats = () => (game() ? game().categories.filter((c) => !c.archived || Object.keys(state.categories[c.id] || {}).length) : []);
+  const roundsOn = () => state.use_rounds && scoring() !== "coop" && !sheetOn();
 
   const HINTS = {
     high: "Highest score wins.",
@@ -62,6 +71,7 @@
     if (seated(id)) {
       state.players = state.players.filter((s) => s.player_id !== id);
       state.rounds.forEach((r) => { delete r.scores[id]; r.won = r.won.filter((w) => w !== id); });
+      Object.values(state.categories).forEach((row) => { delete row[id]; });
     } else {
       state.players.push({ player_id: id, score: null, winner: false, team: "" });
     }
@@ -122,7 +132,7 @@
 
   // ------------------------------------------------------------ rounds
   function renderRounds() {
-    const on = state.use_rounds && scoring() !== "coop";
+    const on = roundsOn();
     $("roundsWrap").hidden = !on;
     const table = $("roundsTable");
     table.replaceChildren();
@@ -197,11 +207,61 @@
   };
   $("useRounds").onchange = (e) => { state.use_rounds = e.target.checked; renderRounds(); renderSeats(); refresh(); };
 
+  // ------------------------------------------------------------ score sheet
+  function renderSheet() {
+    const on = sheetOn();
+    $("sheetWrap").hidden = !on;
+    const table = $("sheetTable");
+    table.replaceChildren();
+    if (!on) return;
+    const head = table.createTHead().insertRow();
+    head.append(document.createElement("th"));
+    for (const s of state.players) {
+      const th = document.createElement("th");
+      th.className = "pl";
+      th.textContent = players.get(s.player_id).name;
+      head.append(th);
+    }
+    const body = table.createTBody();
+    for (const c of sheetCats()) {
+      const tr = body.insertRow();
+      const lc = tr.insertCell();
+      lc.className = "rl";
+      lc.textContent = c.name;
+      if (c.archived) lc.title = "Removed from the game's sheet; kept for this play";
+      for (const s of state.players) {
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = "any"; inp.inputMode = "decimal";
+        inp.setAttribute("aria-label", `${players.get(s.player_id).name} ${c.name}`);
+        inp.value = (state.categories[c.id] || {})[s.player_id] ?? "";
+        inp.oninput = () => {
+          state.categories[c.id] = state.categories[c.id] || {};
+          state.categories[c.id][s.player_id] = num(inp.value);
+          refresh();
+        };
+        tr.insertCell().append(inp);
+      }
+    }
+    const tf = table.createTFoot().insertRow();
+    tf.insertCell().innerHTML = "<strong>Total</strong>";
+    for (const s of state.players) tf.insertCell().dataset.sheetTotal = s.player_id;
+  }
+  $("useSheet").onchange = (e) => { state.use_sheet = e.target.checked; renderAll(); };
+
   // ------------------------------------------------------------ seats / winners
   function roundTotals() {
     const t = {}, w = {};
     for (const s of state.players) { t[s.player_id] = null; w[s.player_id] = 0; }
-    if (!(state.use_rounds && scoring() !== "coop")) return { t, w };
+    if (sheetOn()) {
+      for (const s of state.players) {
+        for (const c of sheetCats()) {
+          const v = (state.categories[c.id] || {})[s.player_id];
+          if (v !== null && v !== undefined) t[s.player_id] = (t[s.player_id] ?? 0) + v;
+        }
+      }
+      return { t, w };
+    }
+    if (!roundsOn()) return { t, w };
     for (const r of state.rounds) {
       for (const s of state.players) {
         const v = r.scores[s.player_id];
@@ -250,7 +310,8 @@
     }
     const points = sc !== "winloss";
     $("seatHint").textContent = points
-      ? (state.use_rounds ? "Final score defaults to the round total. Type a number to override it." : "Final scores")
+      ? (sheetOn() ? "Final score defaults to the sheet total. Type a number to override it."
+        : roundsOn() ? "Final score defaults to the round total. Type a number to override it." : "Final scores")
       : "";
 
     for (const s of state.players) {
@@ -325,12 +386,15 @@
       const pid = Number(td.dataset.total);
       td.textContent = sc === "winloss" ? `${w[pid]} won` : fmt(t[pid]) + (w[pid] ? ` · ${w[pid]}★` : "");
     });
+    document.querySelectorAll("#sheetTable [data-sheet-total]").forEach((td) => {
+      td.textContent = fmt(t[Number(td.dataset.sheetTotal)]);
+    });
     document.querySelectorAll("#seats .seat").forEach((row) => {
       const pid = Number(row.dataset.pid);
       const isW = winners.has(pid);
       row.classList.toggle("is-winner", isW);
       const inp = row.querySelector("input.final-score");
-      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (from ${roundWord().toLowerCase()}s)` : "score";
+      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (from ${sheetOn() ? "sheet" : roundWord().toLowerCase() + "s"})` : "score";
       const wb = row.querySelector(".win-btn");
       if (sc === "coop") { wb.hidden = true; return; }
       wb.hidden = false;
@@ -344,7 +408,9 @@
     const sc = scoring();
     $("scoringHint").textContent = g ? HINTS[sc] : "";
     document.querySelectorAll("#roundWord, .rw").forEach((el) => { el.textContent = roundWord().toLowerCase(); });
-    $("roundsToggleWrap").hidden = sc === "coop";
+    $("sheetToggleWrap").hidden = !sheetAllowed();
+    $("useSheet").checked = sheetOn();
+    $("roundsToggleWrap").hidden = sc === "coop" || sheetOn();
     $("useRounds").checked = state.use_rounds;
     $("scoreCard").hidden = !g;
   }
@@ -352,6 +418,7 @@
   function renderAll() {
     renderGameBits();
     renderChips();
+    renderSheet();
     renderRounds();
     renderSeats();
     refresh();
@@ -362,6 +429,10 @@
     if (g && !state.rounds.some((r) => Object.keys(r.scores).length || r.won.length)) {
       state.use_rounds = g.uses_rounds;
     }
+    if (g) {
+      state.categories = {};
+      state.use_sheet = g.categories.some((c) => !c.archived);
+    }
     if (g && g.scoring === "winloss" && !state.use_rounds) state.winners_manual = true;
     renderAll();
   };
@@ -371,7 +442,8 @@
     if (!g) { e.preventDefault(); alert("Pick a game."); return; }
     if (!state.players.length) { e.preventDefault(); alert("Pick who played."); return; }
     const sc = g.scoring;
-    const useR = state.use_rounds && sc !== "coop";
+    const useR = roundsOn();
+    const useS = sheetOn();
     const ids = new Set(state.players.map((s) => s.player_id));
     const payload = {
       players: state.players.map((s) => ({
@@ -389,6 +461,10 @@
             }))
             .filter((r) => r.label || Object.keys(r.scores).length || r.won.length)
         : [],
+      categories: useS
+        ? Object.fromEntries(sheetCats().map((c) => [c.id, Object.fromEntries(
+            Object.entries(state.categories[c.id] || {}).filter(([k, v]) => ids.has(Number(k)) && v !== null))]))
+        : {},
       winners_manual: sc !== "coop" && state.winners_manual,
       coop_won: sc === "coop" ? state.coop_won : null,
     };
@@ -403,6 +479,7 @@
   if (gameSel.value && init.use_rounds === undefined && !state.rounds.length) {
     const g = game();
     if (g) state.use_rounds = g.uses_rounds;
+    if (g && init.use_sheet === undefined) state.use_sheet = g.categories.some((c) => !c.archived);
     if (g && g.scoring === "winloss" && !state.use_rounds) state.winners_manual = true;
   }
   renderAll();

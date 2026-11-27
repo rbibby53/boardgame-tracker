@@ -53,6 +53,22 @@
   </section>
 </div>
 
+{% if sheet %}
+<section class="card flush" style="margin-top:1rem">
+  <h2>Score sheet averages</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Category</th>{% for p in sheet.players %}<th class="num">{{ p.display_name }}</th>{% endfor %}<th class="num">Record</th></tr></thead>
+    <tbody>{% for r in sheet.rows %}
+      <tr><td>{{ r.cat.name }}{% if r.cat.archived %} <span class="tag">retired</span>{% endif %}</td>
+        {% set top = (r.avgs.values()|list|min if game.scoring == "low" else r.avgs.values()|list|max) if r.avgs else none %}
+        {% for p in sheet.players %}{% set a = r.avgs.get(p.id) %}<td class="num {{ 'round-win' if a is not none and a == top and r.avgs|length > 1 }}">{{ a|score if a is not none else "—" }}</td>{% endfor %}
+        <td class="num nowrap">{% if r.best %}<a href="/plays/{{ r.best[2] }}">{{ r.best[0]|score }}</a> <span class="muted small">{{ r.best[1].display_name if r.best[1] }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  <p class="small muted" style="padding:0 1rem">Averages per play. Highlighted = strongest in that category.</p>
+</section>
+{% endif %}
+
 {% if score_series %}
 <section class="card" style="margin-top:1rem">
   <h2>Scores over time</h2>

@@ -51,7 +51,13 @@
   <section class="card" id="scoreCard">
     <div class="row" style="margin-bottom:.75rem">
       <h2 style="margin:0">Scores</h2><span class="spacer"></span>
+      <label class="check" id="sheetToggleWrap" hidden><input type="checkbox" id="useSheet"> <span>Score sheet</span></label>
       <label class="check" id="roundsToggleWrap"><input type="checkbox" id="useRounds"> <span>Track <span id="roundWord">round</span>s</span></label>
+    </div>
+
+    <div id="sheetWrap" hidden>
+      <div class="score-grid"><table id="sheetTable"></table></div>
+      <p class="hint" style="margin:.4rem 0 1rem">Totals fill in automatically from the sheet.</p>
     </div>
 
     <div id="roundsWrap" hidden>

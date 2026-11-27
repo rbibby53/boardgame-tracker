@@ -23,8 +23,16 @@
       <input type="number" id="min_players" name="min_players" min="1" value="{{ val('min_players', game.min_players if game and game.min_players else '') }}"></div>
     <div><label for="max_players">Max players</label>
       <input type="number" id="max_players" name="max_players" min="1" value="{{ val('max_players', game.max_players if game and game.max_players else '') }}"></div>
+    <div><label for="play_time_min">Play time (minutes) <span class="hint">from the box; used by the picker</span></label>
+      <input type="number" id="play_time_min" name="play_time_min" min="1" value="{{ val('play_time_min', game.play_time_min if game and game.play_time_min else '') }}"></div>
+    <div><label for="year">Year published</label>
+      <input type="number" id="year" name="year" min="1" max="3000" value="{{ val('year', game.year if game and game.year else '') }}"></div>
     <div><label for="bgg_id">BoardGameGeek ID <span class="hint">optional</span></label>
       <input type="number" id="bgg_id" name="bgg_id" min="1" value="{{ val('bgg_id', game.bgg_id if game and game.bgg_id else '') }}"></div>
+    <div class="wide"><label for="categories">Score sheet <span class="hint">one scoring category per line, e.g. Military / Coins / Wonders / Science. Leave empty for a single score.</span></label>
+      {% set cats = (game.active_categories|map(attribute="name")|join("\n")) if game else "" %}
+      <textarea id="categories" name="categories" rows="5" placeholder="Military&#10;Coins&#10;Wonders&#10;Science">{{ val('categories', cats) }}</textarea>
+      {% if game and game.categories|selectattr("archived")|list %}<div class="hint">Removed lines that have saved scores are kept on old plays.</div>{% endif %}</div>
     <div class="wide"><label for="notes">Notes <span class="hint">house rules, setup reminders</span></label>
       <textarea id="notes" name="notes">{{ val('notes', game.notes if game and game.notes else '') }}</textarea></div>
   </div>

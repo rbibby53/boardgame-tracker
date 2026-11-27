@@ -51,6 +51,31 @@
   </section>
 </div>
 
+{% if play.category_scores %}
+{% set sheet = {} %}{% for cs in play.category_scores %}{% set _ = sheet.setdefault(cs.category_id, {}).update({cs.player_id: cs.score}) %}{% endfor %}
+<section class="card flush" style="margin-top:1rem">
+  <h2>Score sheet</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th></th>{% for s in play.seats %}<th class="num">{{ s.player.display_name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for c in play.game.categories if c.id in sheet %}
+      {% set row = sheet[c.id] %}
+      {% set vals = row.values()|list %}
+      {% set best = (vals|min if play.game.scoring == "low" else vals|max) if vals else none %}
+      <tr><td>{{ c.name }}</td>
+      {% for s in play.seats %}{% set v = row.get(s.player_id) %}
+        <td class="num {{ 'round-win' if v is not none and v == best and vals|length > 1 }}">{{ v|score if v is not none else "" }}</td>
+      {% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td><strong>Total</strong></td>{% for s in play.seats %}<td class="num"><strong>{{ s.score|score }}</strong></td>{% endfor %}</tr></tfoot>
+  </table>
+  </div>
+  <p class="small muted" style="padding:0 1rem">Highlighted = best in that category.</p>
+</section>
+{% endif %}
+
 {% if play.rounds %}
 <section class="card flush" style="margin-top:1rem">
   <h2>{{ play.game.round_label or "Round" }}s</h2>

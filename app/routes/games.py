@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from .. import stats
 from ..auth import current_user, require_admin, verify_csrf
 from ..db import get_db
-from ..models import SCORING_TYPES, Game, Play, Player
+from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player
 from ..templating import flash, render
 
 router = APIRouter(prefix="/games")
@@ -17,7 +17,37 @@ def _int_or_none(v) -> int | None:
     return int(v) if v not in (None, "") else None
 
 
-async def _read_game_form(request: Request, game: Game) -> str | None:
+def _sync_categories(db: Session, game: Game, raw: str) -> str | None:
+    names: list[str] = []
+    for line in raw.splitlines():
+        n = line.strip()[:80]
+        if n and n.lower() not in {x.lower() for x in names}:
+            names.append(n)
+    if len(names) > 30:
+        return "That's a lot of score sheet lines. Keep it to 30 or fewer."
+    existing = {c.name.lower(): c for c in game.categories}
+    keep = set()
+    for pos, name in enumerate(names):
+        cat = existing.get(name.lower())
+        if cat is None:
+            cat = GameCategory(name=name)
+            game.categories.append(cat)
+        cat.name, cat.position, cat.archived = name, pos, False
+        keep.add(name.lower())
+    for key, cat in existing.items():
+        if key in keep:
+            continue
+        used = cat.id is not None and db.scalar(
+            select(func.count()).select_from(CategoryScore).where(CategoryScore.category_id == cat.id))
+        if used:
+            cat.archived = True
+            cat.position = 1000 + cat.position
+        else:
+            game.categories.remove(cat)
+    return None
+
+
+async def _read_game_form(request: Request, game: Game, db: Session) -> str | None:
     form = await request.form()
     name = (form.get("name") or "").strip()[:200]
     if not name:
@@ -36,9 +66,15 @@ async def _read_game_form(request: Request, game: Game) -> str | None:
     game.scoring = scoring
     game.uses_rounds = form.get("uses_rounds") == "on"
     game.round_label = (form.get("round_label") or "").strip()[:40] or None
+    try:
+        pt = _int_or_none(form.get("play_time_min"))
+        yr = _int_or_none(form.get("year"))
+    except ValueError:
+        return "Play time and year must be numbers."
     game.min_players, game.max_players, game.bgg_id = mn, mx, bgg
+    game.play_time_min, game.year = pt, yr
     game.notes = (form.get("notes") or "").strip() or None
-    return None
+    return _sync_categories(db, game, form.get("categories") or "")
 
 
 @router.get("")
@@ -62,7 +98,7 @@ def new_game(request: Request, user: Player = Depends(current_user)):
 @router.post("", dependencies=[Depends(verify_csrf)])
 async def create_game(request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     game = Game()
-    err = await _read_game_form(request, game)
+    err = await _read_game_form(request, game, db)
     if not err and db.scalar(select(Game).where(func.lower(Game.name) == game.name.lower())):
         err = f"'{game.name}' already exists."
     if err:
@@ -89,6 +125,7 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
         "recent": list(reversed(plays[-10:])),
         "play_count": len(plays),
         "score_series": stats.score_series(plays),
+        "sheet": stats.category_stats(game, plays),
         "wins_series": stats.cumulative_wins_series(plays),
     })
 
@@ -107,7 +144,7 @@ async def update_game(game_id: int, request: Request, user: Player = Depends(cur
     game = db.get(Game, game_id)
     if game is None:
         raise HTTPException(404)
-    err = await _read_game_form(request, game)
+    err = await _read_game_form(request, game, db)
     if not err:
         dupe = db.scalar(select(Game).where(func.lower(Game.name) == game.name.lower(), Game.id != game.id))
         if dupe:
