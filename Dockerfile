@@ -19,7 +19,7 @@ RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app \
 USER app
 
 ENV DATABASE_URL=sqlite:////data/boardgames.db \
-    FORWARDED_ALLOW_IPS=*
+    FORWARDED_ALLOW_IPS="127.0.0.1,::1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
 VOLUME ["/data"]
 EXPOSE 8000
 

@@ -1,7 +1,7 @@
 import json
 import logging
 import secrets
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -129,8 +129,13 @@ def _safe_next(nxt: str | None) -> str:
 
 
 @router.get("/login")
-async def login(request: Request, next: str | None = None, db: Session = Depends(get_db)):
+async def login(request: Request, next: str | None = None, canon: int = 0, db: Session = Depends(get_db)):
     s = get_settings()
+    # Sign-in must start on the BASE_URL host, or the state cookie is set on the wrong host and the
+    # callback fails ("mismatching state"). Redirect once; `canon` stops a loop if a proxy rewrites Host.
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or "").split(",")[0].strip()
+    if not s.dev_mode and not canon and host and host.lower() != s.base_host:
+        return RedirectResponse(f"{s.base_url}/login?canon=1&next={quote(_safe_next(next))}", status_code=307)
     request.session["next"] = _safe_next(next)
     if s.dev_mode:
         players = db.scalars(select(Player).where(Player.is_active.is_(True)).order_by(Player.display_name)).all()
