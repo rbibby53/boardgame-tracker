@@ -3,12 +3,14 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    Column,
     Date,
     DateTime,
     Float,
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     false,
@@ -100,6 +102,8 @@ class Game(Base):
     # - of a normal game (e.g. Uno Flip of Uno): a variant. Both are played; each has its own shelf status.
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"), index=True)
     is_box: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # Preset round names, one per line (Mexican Train: "Double 12" ... "Double blank"); rounds past the list are numbered.
+    round_names: Mapped[str | None] = mapped_column(Text)
 
     parent: Mapped["Game | None"] = relationship(remote_side=lambda: [Game.id], back_populates="children")
     children: Mapped[list["Game"]] = relationship(back_populates="parent", order_by=lambda: Game.name)
@@ -107,6 +111,13 @@ class Game(Base):
     categories: Mapped[list["GameCategory"]] = relationship(
         back_populates="game", cascade="all, delete-orphan", order_by="GameCategory.position"
     )
+    expansions: Mapped[list["GameExpansion"]] = relationship(
+        back_populates="game", cascade="all, delete-orphan", order_by="GameExpansion.position"
+    )
+
+    @property
+    def active_expansions(self) -> list["GameExpansion"]:
+        return [e for e in self.expansions if not e.archived]
 
     @property
     def active_categories(self) -> list["GameCategory"]:
@@ -115,6 +126,10 @@ class Game(Base):
     @property
     def scoring_label(self) -> str:
         return SCORING_TYPES.get(self.scoring, self.scoring)
+
+    @property
+    def round_name_list(self) -> list[str]:
+        return [n.strip() for n in (self.round_names or "").splitlines() if n.strip()]
 
     @property
     def in_box(self) -> bool:
@@ -151,12 +166,17 @@ class Play(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     coop_won: Mapped[bool | None] = mapped_column(Boolean)
     winners_manual: Mapped[bool] = mapped_column(Boolean, default=False)
+    # How this play was scored when it differs from the game: "winloss" = a points game (e.g. Mexican Train) played
+    # as "who won each round, most rounds wins". None = the game's own scoring.
+    scoring: Mapped[str | None] = mapped_column(String(10))
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("players.id", ondelete="SET NULL"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     game: Mapped[Game] = relationship(back_populates="plays")
     created_by: Mapped[Player | None] = relationship()
+    played_with: Mapped[list["GameExpansion"]] = relationship(secondary="play_expansions",
+                                                              order_by="GameExpansion.position")
     seats: Mapped[list["PlaySeat"]] = relationship(
         back_populates="play", cascade="all, delete-orphan", order_by="PlaySeat.id"
     )
@@ -177,6 +197,28 @@ class Play(Base):
     @property
     def ordered_seats(self) -> list["PlaySeat"]:
         return sorted(self.seats, key=lambda s: (not s.is_winner, s.place is None, s.place or 0, s.id or 0))
+
+    @property
+    def effective_scoring(self) -> str:
+        return self.scoring or self.game.scoring
+
+    @property
+    def by_round_wins(self) -> bool:
+        """Won by counting round wins (no points), whether the game is win/loss or was played that way."""
+        return self.effective_scoring == "winloss" and bool(self.rounds)
+
+    @property
+    def scoring_label(self) -> str:
+        return "Most rounds won" if self.by_round_wins else SCORING_TYPES.get(self.effective_scoring, self.effective_scoring)
+
+    @property
+    def round_wins(self) -> dict[int, int]:
+        out: dict[int, int] = {}
+        for r in self.rounds:
+            for rs in r.scores:
+                if rs.won:
+                    out[rs.player_id] = out.get(rs.player_id, 0) + 1
+        return out
 
 
 class PlaySeat(Base):
@@ -225,6 +267,40 @@ class RoundScore(Base):
 
     round: Mapped[Round] = relationship(back_populates="scores")
     player: Mapped[Player] = relationship()
+
+
+# Which expansions a play used (Catan + Seafarers + 5-6 Player Extension).
+play_expansions = Table(
+    "play_expansions", Base.metadata,
+    Column("play_id", ForeignKey("plays.id", ondelete="CASCADE"), primary_key=True),
+    Column("expansion_id", ForeignKey("game_expansions.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class GameExpansion(Base):
+    """An expansion or extension for a game, and whether it's on our shelf."""
+
+    __tablename__ = "game_expansions"
+    __table_args__ = (UniqueConstraint("game_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(150))
+    owned: Mapped[bool] = mapped_column(Boolean, default=False)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)  # removed from the list, kept on old plays
+
+    game: Mapped[Game] = relationship(back_populates="expansions")
+
+
+class Favorite(Base):
+    """A player's favorite game (shown first when they log a play, filterable in the games list and picker)."""
+
+    __tablename__ = "favorites"
+
+    player_id: Mapped[int] = mapped_column(ForeignKey("players.id", ondelete="CASCADE"), primary_key=True)
+    game_id: Mapped[int] = mapped_column(ForeignKey("games.id", ondelete="CASCADE"), primary_key=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
 class GameCategory(Base):

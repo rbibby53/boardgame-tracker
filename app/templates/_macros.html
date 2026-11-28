@@ -22,7 +22,7 @@
     <span class="d nowrap">{{ play.played_at|dt("%b %-d, %Y") }}</span>
     <span class="ppl">
       {% for s in play.ordered_seats %}
-        <span class="{{ 'w' if s.is_winner and play.game.scoring != 'coop' }}">{% if s.is_winner and play.game.scoring != 'coop' %}🏆 {% endif %}{{ s.player.display_name }}{% if s.score is not none %} · {{ s.score|score }}{% endif %}</span>
+        <span class="{{ 'w' if s.is_winner and play.game.scoring != 'coop' }}">{% if s.is_winner and play.game.scoring != 'coop' %}🏆 {% endif %}{{ s.player.display_name }}{% if s.score is not none %} · {{ s.score|score }}{% elif play.by_round_wins %} · {{ play.round_wins.get(s.player_id, 0) }}★{% endif %}</span>
       {% endfor %}
     </span>
   </a></li>

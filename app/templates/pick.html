@@ -12,8 +12,9 @@
     <div><label for="players">Players tonight</label><input type="number" id="players" name="players" min="1" max="20" inputmode="numeric" value="{{ f.players or '' }}"></div>
     <div><label for="minutes">Time we have (minutes)</label><input type="number" id="minutes" name="minutes" min="5" step="5" inputmode="numeric" value="{{ f.minutes or '' }}" placeholder="any"></div>
     <div><label for="sort">Sort by</label><select id="sort" name="sort">{% for k, v in sorts.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ v }}</option>{% endfor %}</select></div>
-    {% if any_owned %}<div><label for="shelf">Games</label><select id="shelf" name="shelf">
-      <option value="own" {{ 'selected' if f.shelf == 'own' }}>On our shelf</option>
+    {% if any_owned or has_favs %}<div><label for="shelf">Games</label><select id="shelf" name="shelf">
+      {% if any_owned %}<option value="own" {{ 'selected' if f.shelf == 'own' }}>On our shelf</option>{% endif %}
+      {% if has_favs %}<option value="fav" {{ 'selected' if f.shelf == 'fav' }}>★ My favorites</option>{% endif %}
       <option value="all" {{ 'selected' if f.shelf == 'all' }}>Everything we've logged</option></select></div>{% endif %}
   </div>
   <div class="form-actions">

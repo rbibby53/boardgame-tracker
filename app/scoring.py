@@ -1,6 +1,7 @@
 """Pure scoring logic: turns submitted seats + rounds into totals, places and winners."""
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -37,6 +38,9 @@ class PlayPayload(BaseModel):
     categories: dict[int, dict[int, float | None]] = Field(default_factory=dict)
     winners_manual: bool = False
     coop_won: bool | None = None
+    # "wins": a points game (high/low) scored only by who won each round; most round wins takes the game
+    mode: Literal["points", "wins"] | None = None
+    expansions: list[int] = Field(default_factory=list)  # GameExpansion ids played with
 
     @model_validator(mode="after")
     def check(self):
@@ -139,6 +143,11 @@ def compute(scoring: str, payload: PlayPayload) -> list[SeatResult]:
         )
         for s in payload.players
     ]
+
+
+def play_scoring(game_scoring: str, mode: str | None) -> str:
+    """The scoring a play actually uses: a points game logged as round wins is scored win/loss."""
+    return "winloss" if mode == "wins" and game_scoring in ("high", "low") else game_scoring
 
 
 def fmt_score(v: float | None) -> str:

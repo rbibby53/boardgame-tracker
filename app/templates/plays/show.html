@@ -22,14 +22,14 @@
     <h2>{% if play.game.scoring == "coop" %}{{ "🎉 The team won" if play.coop_won else "The game won" }}{% else %}Results{% endif %}</h2>
     <div class="table-wrap">
     <table class="podium">
-      <thead><tr><th>#</th><th>Player</th>{% if seats|selectattr("team")|list %}<th>Team</th>{% endif %}<th class="num">Score</th></tr></thead>
+      <thead><tr><th>#</th><th>Player</th>{% if seats|selectattr("team")|list %}<th>Team</th>{% endif %}<th class="num">{{ "Rounds won" if play.by_round_wins else "Score" }}</th></tr></thead>
       <tbody>
       {% for s in seats %}
         <tr class="{{ 'win' if s.is_winner and play.game.scoring != 'coop' }}">
           <td class="place">{% if s.is_winner and play.game.scoring != 'coop' %}🏆{% else %}{{ s.place or "" }}{% endif %}</td>
           <td>{{ who(s.player) }}</td>
           {% if seats|selectattr("team")|list %}<td>{{ s.team or "" }}</td>{% endif %}
-          <td class="num">{{ s.score|score }}</td>
+          <td class="num">{{ play.round_wins.get(s.player_id, 0) if play.by_round_wins else s.score|score }}</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -43,8 +43,9 @@
     <dl class="kv">
       {% if play.location %}<dt>Where</dt><dd>{{ play.location }}</dd>{% endif %}
       {% if play.duration_min %}<dt>Length</dt><dd>{{ play.duration_min // 60 ~ "h " if play.duration_min >= 60 }}{{ play.duration_min % 60 }}m</dd>{% endif %}
+      {% if play.played_with %}<dt>Played with</dt><dd>{{ play.played_with|map(attribute="name")|join(", ") }}</dd>{% endif %}
       {% if play.expansions %}<dt>Expansions / rules</dt><dd>{{ play.expansions }}</dd>{% endif %}
-      <dt>Scoring</dt><dd>{{ play.game.scoring_label }}</dd>
+      <dt>Scoring</dt><dd>{{ play.scoring_label }}</dd>
       <dt>Logged by</dt><dd>{{ play.created_by.display_name if play.created_by else "—" }} <span class="muted small">· {{ play.created_at|utc }}</span></dd>
     </dl>
     {% if play.notes %}<h3 style="margin-top:1rem">Notes</h3><p class="notes">{{ play.notes }}</p>{% endif %}
@@ -113,7 +114,7 @@
       {% endfor %}</tr>
     {% endfor %}
     </tbody>
-    <tfoot><tr><td><strong>Total</strong></td>{% for s in play.seats %}<td class="num"><strong>{{ s.score|score }}</strong></td>{% endfor %}</tr></tfoot>
+    <tfoot><tr><td><strong>{{ "Won" if play.by_round_wins else "Total" }}</strong></td>{% for s in play.seats %}<td class="num"><strong>{{ play.round_wins.get(s.player_id, 0) if play.by_round_wins else s.score|score }}</strong></td>{% endfor %}</tr></tfoot>
   </table>
   </div>
   <p class="small muted" style="padding:0 1rem">★ = won the {{ (play.game.round_label or "round")|lower }}</p>

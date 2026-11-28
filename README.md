@@ -388,6 +388,27 @@ Deleting a box or base game keeps its mini-games or variants as standalone games
 </details>
 
 <details>
+<summary><b>Keeping score by round (Mexican Train, Uno, Hearts…)</b></summary>
+
+Tick **Keep score by round** (on by default for games set up that way). For a points game you then choose:
+
+- **Who won each round:** no points. Tap the player who won each round; whoever wins the most rounds wins the game.
+- **Points:** type everyone's points per round; totals and the winner (lowest or highest, per the game) fill in themselves.
+
+The form remembers which one you used last time for that game. A live line above the rounds shows who's leading. Give a game **Round names** (e.g. Mexican Train: `Double 12` … `Double blank`) and every round is labelled, with **+ Next round: Double 11** to add the next one. Overriding totals, picking the winner by hand and teams are under **More options**.
+
+Your scores are saved on the phone as you go, so a locked screen or lost signal doesn't lose the game.
+</details>
+
+<details>
+<summary><b>Expansions, favorites and finding games</b></summary>
+
+- **Expansions:** list a game's expansions and extensions on its Edit page and tick the ones you have. When you log a play, tap the ones you're playing with. The ones you own come first, and it remembers what you used last time. The play and the game page show what was used.
+- **Favorites:** tap ☆ on a game (in the list or on its page). Each person's favorites come first in **Log a play**, and the games list and picker can show only them. Starring a box of games (a Jackbox pack) covers its mini-games.
+- **Search:** the games list has a search box, and **Log a play** has a "Type to find a game" box above the game list. Your recently played games are listed first.
+</details>
+
+<details>
 <summary><b>BGG collection sync</b></summary>
 
 **Admin → Sync BGG collection** reads the board games a BGG user marks **Own** (expansions skipped). The preview shows exactly what will change:
