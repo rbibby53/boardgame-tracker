@@ -59,7 +59,8 @@ def plan(db: Session, items: list[dict]) -> dict:
             update.append({"game": g, "item": it, "changes": changes})
         else:
             same += 1
-    gone = db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}))
+    gone = db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}),
+                                         Game.parent_id.is_(None))  # mini-games follow their collection
                       .order_by(Game.name)).all()
     # keys avoid dict method names (Jinja's plan.update would resolve to dict.update)
     return {"new_games": add, "updates": update, "same": same, "gone": gone, "total": len(items)}
@@ -96,18 +97,21 @@ def apply(db: Session, items: list[dict], *, add_new: bool, unown_gone: bool, ar
                 g.bgg_id, changed = it["bgg_id"], True
             if not g.owned or g.archived:
                 g.owned, g.archived, changed = True, False, True
+                g.cascade_to_children(archived=True)
             counts["updated"] += int(changed)
         matched_ids.add(g.id)
         if not g.has_cover and it.get("image"):
             covers.append((g.id, it["image"]))
 
-    for g in db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}))).all():
+    for g in db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}),
+                                           Game.parent_id.is_(None))).all():
         if unown_gone or archive_gone:
             g.owned = False
             counts["unowned"] += 1
         if archive_gone:
             g.archived = True
             counts["archived"] += 1
+        g.cascade_to_children(archived=archive_gone)
     db.commit()
     return counts, covers
 

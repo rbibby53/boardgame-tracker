@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
@@ -14,6 +15,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+
+
+def natural_key(name: str) -> list:
+    """Sort key that puts "Party Pack 2" before "Party Pack 10"."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name or "")]
 
 
 def utcnow() -> datetime:
@@ -87,7 +93,12 @@ class Game(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Mini-games: a game can be part of a collection (e.g. Quiplash 3 in Jackbox Party Pack 7). One level only:
+    # a collection has no parent, and a mini-game has no mini-games. Shelf + archive status follow the collection.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"), index=True)
 
+    parent: Mapped["Game | None"] = relationship(remote_side=lambda: [Game.id], back_populates="children")
+    children: Mapped[list["Game"]] = relationship(back_populates="parent", order_by=lambda: Game.name)
     plays: Mapped[list["Play"]] = relationship(back_populates="game")
     categories: Mapped[list["GameCategory"]] = relationship(
         back_populates="game", cascade="all, delete-orphan", order_by="GameCategory.position"
@@ -100,6 +111,18 @@ class Game(Base):
     @property
     def scoring_label(self) -> str:
         return SCORING_TYPES.get(self.scoring, self.scoring)
+
+    @property
+    def is_collection(self) -> bool:
+        return bool(self.children)
+
+    def cascade_to_children(self, *, archived: bool = False) -> None:
+        """Mini-games follow their collection onto/off the shelf, and (when the collection itself is archived or
+        restored) into/out of the archive. A single mini-game can still be archived on its own."""
+        for c in self.children:
+            c.owned = self.owned
+            if archived:
+                c.archived = self.archived
 
 
 class Play(Base):

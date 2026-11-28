@@ -7,9 +7,15 @@
     {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
     <div>
     <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}</h1>
+    {% if game.parent %}<p class="small" style="margin:0 0 .2rem">Part of <a href="/games/{{ game.parent.id }}">{{ game.parent.name }}</a></p>{% endif %}
+    {% if kids %}
+    <p class="muted">Collection · {{ kids|length }} mini-games{% if span[0] %} · {{ span[0] }}{% if span[1] and span[1] != span[0] %}–{{ span[1] }}{% endif %} players{% endif %}
+      {% if game.year %} · {{ game.year }}{% endif %}{% if game.owned %} · on our shelf{% endif %}</p>
+    {% else %}
     <p class="muted">{{ game.scoring_label }}{% if game.min_players %} · {{ game.min_players }}{% if game.max_players and game.max_players != game.min_players %}–{{ game.max_players }}{% endif %} players{% endif %}
       {% if game.year %} · {{ game.year }}{% endif %}{% if game.play_time_min %} · ~{{ game.play_time_min }} min{% endif %}
       {% if game.bgg_id %} · <a href="https://boardgamegeek.com/boardgame/{{ game.bgg_id }}" rel="noopener noreferrer" target="_blank">BGG</a>{% endif %}</p>
+    {% endif %}
     </div>
   </div>
   <div class="row">
@@ -18,13 +24,14 @@
     <form class="inline" method="post" action="/games/{{ game.id }}/archive"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">{{ "Restore" if game.archived else "Archive" }}</button></form>
     {% if play_count == 0 %}<form class="inline" method="post" action="/games/{{ game.id }}/delete" onsubmit="return confirm('Delete this game?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn danger">Delete</button></form>{% endif %}
     {% endif %}
-    {% if can('log_plays') %}<a class="btn primary" href="/plays/new?game={{ game.id }}">+ Log a play</a>{% endif %}
+    {% if kids %}{% if can('manage_games') %}<a class="btn primary" href="/games/new?parent={{ game.id }}">+ Add mini-game</a>{% endif %}
+    {% elif can('log_plays') %}<a class="btn primary" href="/plays/new?game={{ game.id }}">+ Log a play</a>{% endif %}
   </div>
 </div>
 
 <div class="grid stats" style="margin-bottom:1rem">
   <div class="card stat"><div class="v">{{ play_count }}</div><div class="l">Plays</div></div>
-  {% if game.scoring == "coop" %}
+  {% if game.scoring == "coop" and not kids %}
   <div class="card stat"><div class="v">{{ records.coop_wins }}/{{ play_count }}</div><div class="l">Team wins</div></div>
   {% endif %}
   {% if records.best %}<div class="card stat"><div class="v">{{ records.best[0]|score }}</div><div class="l">{{ "Lowest" if game.scoring == "low" else "Best" }} score · <a href="/plays/{{ records.best[2].id }}">{{ records.best[1].display_name }}</a></div></div>{% endif %}
@@ -34,19 +41,35 @@
 
 {% if game.notes %}<div class="card" style="margin-bottom:1rem"><p class="notes" style="margin:0">{{ game.notes }}</p></div>{% endif %}
 
+{% if kids %}
+<section class="card flush" style="margin-bottom:1rem">
+  <h2>Mini-games</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Game</th><th>Scoring</th><th class="num">Players</th><th class="num">Plays</th><th></th></tr></thead>
+    <tbody>{% for c in kids %}
+      <tr><td><a href="/games/{{ c.id }}"><strong>{{ c.name }}</strong></a>{% if c.archived %} <span class="tag">archived</span>{% endif %}</td>
+        <td class="small muted">{{ c.scoring_label }}{% if c.uses_rounds %} · {{ (c.round_label or "round")|lower }}s{% endif %}</td>
+        <td class="num small">{% if c.min_players %}{{ c.min_players }}{% if c.max_players and c.max_players != c.min_players %}–{{ c.max_players }}{% endif %}{% else %}—{% endif %}</td>
+        <td class="num">{{ kid_plays.get(c.id, 0) }}</td>
+        <td class="num">{% if can('log_plays') and not c.archived %}<a class="btn sm" href="/plays/new?game={{ c.id }}">Log</a>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
 <div class="grid">
   <section class="card flush">
     <h2>Standings</h2>
     {% if board %}
     <div class="table-wrap"><table>
       <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Plays</th><th class="num">Win %</th>
-        {% if game.scoring in ("high", "low") %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}
-        {% if game.scoring != "coop" %}<th class="num">Rating</th>{% endif %}</tr></thead>
+        {% if game.scoring in ("high", "low") and not kids %}<th class="num">Avg</th><th class="num">Best</th>{% endif %}
+        {% if game.scoring != "coop" and not kids %}<th class="num">Rating</th>{% endif %}</tr></thead>
       <tbody>
       {% for r in board %}
         <tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td><td class="num">{{ r.win_rate|pct }}</td>
-          {% if game.scoring in ("high", "low") %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}
-          {% if game.scoring != "coop" %}{% set gr = rt.game_for(game.id, r.player.id) %}<td class="num">{{ gr if gr else "—" }}{% if gr and rt.provisional(r.player.id, game.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>{% endif %}</tr>
+          {% if game.scoring in ("high", "low") and not kids %}<td class="num">{{ r.avg_score|score }}</td><td class="num">{{ r.best(game.scoring)|score }}</td>{% endif %}
+          {% if game.scoring != "coop" and not kids %}{% set gr = rt.game_for(game.id, r.player.id) %}<td class="num">{{ gr if gr else "—" }}{% if gr and rt.provisional(r.player.id, game.id) %}<span class="muted" title="Provisional: fewer than 5 rated plays">?</span>{% endif %}</td>{% endif %}</tr>
       {% endfor %}
       </tbody>
     </table></div>
@@ -54,7 +77,7 @@
   </section>
   <section class="card flush">
     <h2>Recent plays</h2>
-    {{ play_list(recent, show_game=False) }}
+    {{ play_list(recent, show_game=kids|length > 0) }}
     {% if play_count > 10 %}<div style="padding:0 1rem 1rem"><a class="small" href="/plays?game={{ game.id }}">All {{ play_count }} plays →</a></div>{% endif %}
   </section>
 </div>
@@ -88,7 +111,7 @@
   {{ chart("ratingChart", rating_series, "rating") }}
 </section>
 {% endif %}
-{% if wins_series and game.scoring != "coop" %}
+{% if wins_series and (game.scoring != "coop" or kids) %}
 <section class="card" style="margin-top:1rem">
   <h2>Wins over time</h2>
   {{ chart("winsChart", wins_series, "cumulative") }}

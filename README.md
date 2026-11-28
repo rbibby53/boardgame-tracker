@@ -369,6 +369,18 @@ You get a preview before anything is written. Players match by username, then na
 </details>
 
 <details>
+<summary><b>Mini-games (Jackbox packs and other collections)</b></summary>
+
+Some boxes hold several games, like a Jackbox Party Pack. Add the box as a game, then add each game in it with **Part of** set to the box. You can also pick any existing game there to turn it into a collection.
+
+- **Games list:** mini-games are listed under their collection.
+- **Collection page:** its mini-games with play counts, plus standings and recent plays across all of them. Scores, records and ratings stay on each mini-game's page, because they score differently.
+- **Log a play** and **What should we play?** offer the mini-games, grouped under the collection, never the box itself. The picker uses each mini-game's own player count and length.
+- **Shelf and archive:** a mini-game follows its collection. Archiving or restoring the collection does the same to its mini-games; you can still archive one mini-game on its own.
+- One level only: a collection can't be part of another collection. Deleting a collection keeps its mini-games as standalone games.
+</details>
+
+<details>
 <summary><b>BGG collection sync</b></summary>
 
 **Admin → Sync BGG collection** reads the board games a BGG user marks **Own** (expansions skipped). The preview shows exactly what will change:

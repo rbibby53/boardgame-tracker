@@ -138,6 +138,8 @@ th { font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color:
 tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
 td.rank { width: 2.5rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+tr.sub td:first-child { padding-left: 1.75rem; }
+tr.sub td { font-size: .94em; }
 
 /* ---------- people & chips ---------- */
 .avatar {

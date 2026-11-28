@@ -14,8 +14,8 @@ def color_for(p: Player) -> str:
     return p.display_color
 
 
-def load_plays(db: Session, *, game_id: int | None = None, player_id: int | None = None,
-               since: datetime | None = None) -> list[Play]:
+def load_plays(db: Session, *, game_id: int | None = None, game_ids: list[int] | None = None,
+               player_id: int | None = None, since: datetime | None = None) -> list[Play]:
     q = (
         select(Play)
         .options(
@@ -28,6 +28,8 @@ def load_plays(db: Session, *, game_id: int | None = None, player_id: int | None
     )
     if game_id is not None:
         q = q.where(Play.game_id == game_id)
+    if game_ids is not None:  # a collection: its own plays plus its mini-games'
+        q = q.where(Play.game_id.in_(game_ids or [-1]))
     if player_id is not None:
         q = q.where(Play.seats.any(PlaySeat.player_id == player_id))
     if since is not None:

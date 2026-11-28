@@ -22,6 +22,21 @@
   <div class="fields">
     <div class="wide"><label for="name">Name</label>
       <input type="text" id="name" name="name" required maxlength="200" value="{{ val('name', game.name if game else '') }}" autofocus></div>
+    <div class="wide">
+      {% if game and game.children %}
+      <label>Mini-games</label>
+      <p class="hint" style="margin:0">This is a collection of {{ game.children|length }} mini-games, so it can't be part of another one.
+        Its shelf status applies to all of them. <a href="/games/new?parent={{ game.id }}">+ Add a mini-game</a></p>
+      {% else %}
+      <label for="parent_id">Part of <span class="hint">for mini-games in a collection, e.g. Quiplash 3 in Jackbox Party Pack 7. The collection is just another game.</span></label>
+      {% set cur_parent = val('parent_id', game.parent_id if game and game.parent_id else (prefill_parent or ''))|string %}
+      <select id="parent_id" name="parent_id">
+        <option value="">Not part of a collection</option>
+        {% if collections %}<optgroup label="Collections">{% for c in collections %}<option value="{{ c.id }}" {{ 'selected' if cur_parent == c.id|string }}>{{ c.name }} ({{ c.children|length }})</option>{% endfor %}</optgroup>{% endif %}
+        {% if other_games %}<optgroup label="Start a collection under…">{% for c in other_games %}<option value="{{ c.id }}" {{ 'selected' if cur_parent == c.id|string }}>{{ c.name }}</option>{% endfor %}</optgroup>{% endif %}
+      </select>
+      {% endif %}
+    </div>
     <div><label for="scoring">How is it won?</label>
       {% set cur = val('scoring', game.scoring if game else 'high') %}
       <select id="scoring" name="scoring">{% for k, v in SCORING_TYPES.items() %}<option value="{{ k }}" {{ 'selected' if cur == k }}>{{ v }}</option>{% endfor %}</select></div>
@@ -29,7 +44,8 @@
       {% set ur = ('uses_rounds' in f) if form else (game.uses_rounds if game else false) %}
       <label class="check"><input type="checkbox" name="uses_rounds" {{ 'checked' if ur }}> Score by round by default</label>
       {% set ow = ('owned' in f) if form else (game.owned if game else true) %}
-      <label class="check" style="margin-top:.4rem"><input type="checkbox" name="owned" {{ 'checked' if ow }}> On our shelf</label></div>
+      <label class="check" style="margin-top:.4rem"><input type="checkbox" name="owned" {{ 'checked' if ow }}> On our shelf</label>
+      {% if game and game.parent %}<div class="hint">Follows {{ game.parent.name }}.</div>{% endif %}</div>
     <div><label for="round_label">What's a round called? <span class="hint">Round, Hand, Era, Age…</span></label>
       <input type="text" id="round_label" name="round_label" maxlength="40" placeholder="Round" value="{{ val('round_label', game.round_label if game and game.round_label else '') }}"></div>
     <div><label for="min_players">Min players</label>

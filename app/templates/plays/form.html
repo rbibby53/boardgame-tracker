@@ -16,7 +16,7 @@
         <label for="game_id">Game {% if can('manage_games') %}<a class="hint" href="/games/new?next=log">+ new game</a>{% endif %}</label>
         <select name="game_id" id="game_id" required>
           <option value="">Choose a game…</option>
-          {% for g in games %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+          {% for col, gs in game_groups %}{% if col %}<optgroup label="{{ col.name }}">{% for g in gs %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>{% else %}<option value="{{ gs[0].id }}">{{ gs[0].name }}</option>{% endif %}{% endfor %}
         </select>
         <div class="hint" id="scoringHint"></div>
       </div>

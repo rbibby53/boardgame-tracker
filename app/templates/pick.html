@@ -26,6 +26,7 @@
 <div class="card champion" style="margin-bottom:1rem">
   {% if chosen.game.has_cover %}<img class="cover" src="/covers/{{ chosen.game.id }}" alt="">{% endif %}
   <div><div class="small muted">Tonight's pick</div><h2 style="margin:.1rem 0"><a href="/games/{{ chosen.game.id }}">{{ chosen.game.name }}</a></h2>
+    {% if chosen.game.parent %}<div class="small muted">from {{ chosen.game.parent.name }}</div>{% endif %}
     <div class="small muted">{% if chosen.last %}Last played {{ chosen.last|dt("%b %-d, %Y") }}{% else %}Never played!{% endif %}{% if chosen.length %} · ~{{ chosen.length }} min{% endif %}</div></div>
   <span class="spacer"></span>
   {% if can('log_plays') %}<a class="btn primary" href="/plays/new?game={{ chosen.game.id }}">Log it</a>{% endif %}
@@ -46,7 +47,7 @@
     <thead><tr>{% if voting %}<th style="width:2rem"><span class="sr-only">Vote</span></th>{% endif %}<th>Game</th><th class="num">Players</th><th class="num">Length</th><th class="num">Plays</th><th class="num">Last played</th></tr></thead>
     <tbody>{% for r in results %}{% set g = r.game %}
       <tr>{% if voting %}<td><input type="checkbox" name="game_ids" value="{{ g.id }}" aria-label="Include {{ g.name }} in the vote" {{ 'checked' if loop.index <= 6 }}></td>{% endif %}
-        <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<span class="n"><strong>{{ g.name }}</strong></span></a>
+        <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<span class="n"><strong>{{ g.name }}</strong></span></a>{% if g.parent %}<span class="muted small"> · {{ g.parent.name }}</span>{% endif %}
           {% for n in r.notes %}<span class="tag">{{ n }}</span> {% endfor %}</td>
         <td class="num nowrap">{% if g.min_players or g.max_players %}{{ g.min_players or "?" }}{% if g.max_players != g.min_players %}–{{ g.max_players or "?" }}{% endif %}{% else %}—{% endif %}</td>
         <td class="num nowrap" title="{{ r.length_src or '' }}">{{ ("~" ~ r.length ~ "m") if r.length else "—" }}</td>
