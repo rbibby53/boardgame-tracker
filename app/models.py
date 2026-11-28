@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
@@ -10,10 +11,16 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
+
+
+def natural_key(name: str) -> list:
+    """Sort key that puts "Party Pack 2" before "Party Pack 10"."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name or "")]
 
 
 def utcnow() -> datetime:
@@ -87,7 +94,15 @@ class Game(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # A game can be part of another one, one level deep (a parent has no parent):
+    # - in a box (is_box on the parent, e.g. Quiplash 3 in Jackbox Party Pack 7): a mini-game. The box isn't
+    #   played itself, and its mini-games follow its shelf + archive status.
+    # - of a normal game (e.g. Uno Flip of Uno): a variant. Both are played; each has its own shelf status.
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"), index=True)
+    is_box: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
+    parent: Mapped["Game | None"] = relationship(remote_side=lambda: [Game.id], back_populates="children")
+    children: Mapped[list["Game"]] = relationship(back_populates="parent", order_by=lambda: Game.name)
     plays: Mapped[list["Play"]] = relationship(back_populates="game")
     categories: Mapped[list["GameCategory"]] = relationship(
         back_populates="game", cascade="all, delete-orphan", order_by="GameCategory.position"
@@ -100,6 +115,26 @@ class Game(Base):
     @property
     def scoring_label(self) -> str:
         return SCORING_TYPES.get(self.scoring, self.scoring)
+
+    @property
+    def in_box(self) -> bool:
+        """A mini-game in a box of games (as opposed to a variant of a playable base game)."""
+        return self.parent is not None and self.parent.is_box
+
+    @property
+    def family_word(self) -> str:
+        """What this game's children are called."""
+        return "mini-games" if self.is_box else "variants"
+
+    def cascade_to_children(self, *, archived: bool = False) -> None:
+        """A box's mini-games follow it onto/off the shelf, and (when the box itself is archived or restored)
+        into/out of the archive. A single mini-game can still be archived on its own. Variants are left alone."""
+        if not self.is_box:
+            return
+        for c in self.children:
+            c.owned = self.owned
+            if archived:
+                c.archived = self.archived
 
 
 class Play(Base):

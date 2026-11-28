@@ -16,7 +16,7 @@
         <label for="game_id">Game {% if can('manage_games') %}<a class="hint" href="/games/new?next=log">+ new game</a>{% endif %}</label>
         <select name="game_id" id="game_id" required>
           <option value="">Choose a game…</option>
-          {% for g in games %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}
+          {% for col, gs in game_groups %}{% if col %}<optgroup label="{{ col.name }}">{% for g in gs %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>{% else %}<option value="{{ gs[0].id }}">{{ gs[0].name }}</option>{% endif %}{% endfor %}
         </select>
         <div class="hint" id="scoringHint"></div>
       </div>
@@ -33,7 +33,7 @@
         <input type="number" name="duration_min" id="duration_min" min="1" inputmode="numeric" value="{{ form.duration_min if form else (play.duration_min if play and play.duration_min else '') }}">
       </div>
       <div class="wide">
-        <label for="expansions">Expansions / variant <span class="hint">optional</span></label>
+        <label for="expansions">Expansions / house rules <span class="hint">optional</span></label>
         <input type="text" name="expansions" id="expansions" maxlength="500" value="{{ form.expansions if form else (play.expansions if play and play.expansions else '') }}">
       </div>
     </div>

@@ -11,7 +11,7 @@
 </div>
 <form class="filters" method="get" style="margin-bottom:1rem">
   <select name="game" onchange="this.form.submit()"><option value="">All games</option>
-    {% for g in games %}<option value="{{ g.id }}" {{ 'selected' if f_game == g.id }}>{{ g.name }}</option>{% endfor %}</select>
+    {% for g, mini in games %}<option value="{{ g.id }}" {{ 'selected' if f_game == g.id }}>{{ "  ↳ " if mini }}{{ g.name }}{{ ((" (all)" if g.is_box else " (all versions)") if g.children and not mini) or "" }}</option>{% endfor %}</select>
   <select name="player" onchange="this.form.submit()"><option value="">Anyone</option>
     {% for p in players %}<option value="{{ p.id }}" {{ 'selected' if f_player == p.id }}>{{ p.display_name }}</option>{% endfor %}</select>
   {% if f_game or f_player %}<a class="btn sm ghost" href="/plays">Clear</a>{% endif %}
@@ -20,7 +20,7 @@
 <div class="card flush">{{ play_list(plays) }}</div>
 {% if pages > 1 %}
 <div class="pager">
-  {% set qs = ("&game=" ~ f_game if f_game else "") ~ ("&player=" ~ f_player if f_player else "") %}
+  {% set qs = ("&game=" ~ f_game if f_game else "") ~ ("&player=" ~ f_player if f_player else "") ~ ("&exact=1" if f_exact else "") %}
   {% if page > 1 %}<a class="btn sm" href="?page={{ page - 1 }}{{ qs }}">← Newer</a>{% endif %}
   <span class="muted small">Page {{ page }} of {{ pages }}</span>
   {% if page < pages %}<a class="btn sm" href="?page={{ page + 1 }}{{ qs }}">Older →</a>{% endif %}

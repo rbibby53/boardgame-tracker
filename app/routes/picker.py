@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..auth import current_user
 from ..db import get_db
@@ -31,13 +31,16 @@ def pick(request: Request, players: str | None = None, minutes: str | None = Non
     if shelf not in ("own", "all"):
         shelf = "own" if any_owned else "all"
     q = (select(Game, func.count(Play.id), func.max(Play.played_at), func.avg(Play.duration_min))
-         .outerjoin(Play).where(Game.archived.is_(False)).group_by(Game.id))
+         .outerjoin(Play).where(Game.archived.is_(False)).group_by(Game.id)
+         .options(selectinload(Game.children), selectinload(Game.parent)))
     if shelf == "own":
         q = q.where(Game.owned.is_(True))
     rows = db.execute(q).all()
 
     results = []
     for g, count, last, avg_dur in rows:
+        if g.is_box and g.children:  # a box of games: suggest its mini-games (own player counts), not the box
+            continue
         length = g.play_time_min or (round(avg_dur) if avg_dur else None)
         notes = []
         if n is not None:

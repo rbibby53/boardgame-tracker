@@ -10,8 +10,8 @@ import secrets
 import time
 from pathlib import Path
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from . import bgg, media
 from .config import get_settings
@@ -38,6 +38,14 @@ def _match(db: Session, item: dict) -> Game | None:
     return g or db.scalar(select(Game).where(func.lower(Game.name) == item["name"].lower(), Game.bgg_id.is_(None)))
 
 
+def _not_in_a_box():
+    """A box's mini-games follow the box's shelf status, so the collection sync leaves them to it.
+    Variants (Uno Flip) are boxes of their own and are synced like any game."""
+    box = aliased(Game)
+    boxes = select(box.id).where(box.is_box.is_(True))
+    return or_(Game.parent_id.is_(None), Game.parent_id.not_in(boxes))
+
+
 def plan(db: Session, items: list[dict]) -> dict:
     add, update, same, matched_ids = [], [], 0, set()
     for it in items:
@@ -59,8 +67,8 @@ def plan(db: Session, items: list[dict]) -> dict:
             update.append({"game": g, "item": it, "changes": changes})
         else:
             same += 1
-    gone = db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}))
-                      .order_by(Game.name)).all()
+    gone = db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}),
+                                         _not_in_a_box()).order_by(Game.name)).all()
     # keys avoid dict method names (Jinja's plan.update would resolve to dict.update)
     return {"new_games": add, "updates": update, "same": same, "gone": gone, "total": len(items)}
 
@@ -96,18 +104,21 @@ def apply(db: Session, items: list[dict], *, add_new: bool, unown_gone: bool, ar
                 g.bgg_id, changed = it["bgg_id"], True
             if not g.owned or g.archived:
                 g.owned, g.archived, changed = True, False, True
+                g.cascade_to_children(archived=True)
             counts["updated"] += int(changed)
         matched_ids.add(g.id)
         if not g.has_cover and it.get("image"):
             covers.append((g.id, it["image"]))
 
-    for g in db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}))).all():
+    for g in db.scalars(select(Game).where(Game.owned.is_(True), Game.id.not_in(matched_ids or {-1}),
+                                           _not_in_a_box())).all():
         if unown_gone or archive_gone:
             g.owned = False
             counts["unowned"] += 1
         if archive_gone:
             g.archived = True
             counts["archived"] += 1
+        g.cascade_to_children(archived=archive_gone)
     db.commit()
     return counts, covers
 

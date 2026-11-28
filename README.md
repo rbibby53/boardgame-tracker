@@ -15,7 +15,7 @@
   <a href="https://github.com/rbibby53/boardgame-tracker/actions/workflows/docker.yml"><img src="https://github.com/rbibby53/boardgame-tracker/actions/workflows/docker.yml/badge.svg" alt="Build"></a>
   <a href="https://github.com/rbibby53/boardgame-tracker/pkgs/container/boardgame-tracker"><img src="https://img.shields.io/badge/ghcr.io-boardgame--tracker-2f6fdb?logo=docker&logoColor=white" alt="Container image"></a>
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-555" alt="amd64 | arm64">
-  <img src="https://img.shields.io/badge/python-3.13-3776ab?logo=python&logoColor=white" alt="Python 3.13">
+  <img src="https://img.shields.io/badge/python-3.15-3776ab?logo=python&logoColor=white" alt="Python 3.15">
   <img src="https://img.shields.io/badge/SSO-Authentik-fd4b2d" alt="Authentik SSO">
 </p>
 
@@ -366,6 +366,25 @@ All settings are environment variables; see [`.env.example`](.env.example).
 - **BGG plays XML file**, or a **BGG username** (needs `BGG_TOKEN`).
 
 You get a preview before anything is written. Players match by username, then name; anyone unknown becomes a guest. Re-running the same import is safe.
+</details>
+
+<details>
+<summary><b>Mini-games and variants (Jackbox packs, Uno Flip…)</b></summary>
+
+A game can be **Part of** another game, one level deep. There are two kinds:
+
+**Boxes of games** (a Jackbox Party Pack): tick *Box of games, not played itself* on the box, then add each game in it with **Part of** set to the box.
+
+- The box is never offered in **Log a play** or **What should we play?**. Its mini-games are, grouped under it, each with its own player count and length.
+- The box page lists its mini-games, with standings and recent plays across all of them. Scores, records and ratings stay on each mini-game's page.
+- Mini-games follow the box's shelf status. Archiving or restoring the box does the same to them; you can still archive one on its own.
+
+**Variants** (Uno Flip and Uno Attack of Uno, Ticket to Ride: Europe…): set **Part of** to the base game.
+
+- The base game and each variant are played, rated and shelved separately, with their own scoring, score sheet and player counts.
+- The base game's page adds a *Variants* list and *All versions* standings. Filtering plays by the base game includes its variants.
+
+Deleting a box or base game keeps its mini-games or variants as standalone games.
 </details>
 
 <details>

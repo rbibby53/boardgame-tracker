@@ -10,19 +10,31 @@
   </div>
 </div>
 <div class="card flush">
-  {% if rows %}
+  {% if entries %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Game</th><th>Scoring</th><th class="num">Plays</th><th class="num">Last played</th><th></th></tr></thead>
+    <thead><tr><th>Game</th><th class="hide-sm">Scoring</th><th class="num">Plays</th><th class="num hide-sm">Last played</th><th><span class="sr-only">Log a play</span></th></tr></thead>
     <tbody>
-    {% for g, n, last in rows %}
-      <tr>
-        <td><a class="who" href="/games/{{ g.id }}">{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
-          {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}</td>
-        <td class="small muted">{% if g.owned %}<span class="tag" title="On our shelf">owned</span> {% endif %}{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}</td>
+    {% macro game_meta(g, count, sub) -%}
+      {% if g.owned and not (sub and g.in_box) %}<span class="tag" title="On our shelf">owned</span> {% endif -%}
+      {% if count and g.is_box %}<span class="tag nowrap" title="Box of games">{{ count }} games</span>
+      {%- else %}{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}
+        {%- if count %} <span class="tag nowrap" title="Variants">{{ count }} variant{{ "s" if count > 1 }}</span>{% endif %}{% endif %}
+    {%- endmacro %}
+    {% macro game_row(g, n, last, sub=false, count=0) %}
+      <tr{% if sub %} class="sub"{% endif %}>
+        <td><a class="who" href="/games/{{ g.id }}">{% if sub %}<span class="muted" aria-hidden="true">↳</span>{% endif %}{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
+          {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}
+          {% if not sub and g.parent %}<span class="muted small"> · {{ "part" if g.in_box else "variant" }} of <a href="/games/{{ g.parent.id }}">{{ g.parent.name }}</a></span>{% endif %}
+          <div class="show-sm small muted">{{ game_meta(g, count, sub) }}</div></td>
+        <td class="small muted hide-sm">{{ game_meta(g, count, sub) }}</td>
         <td class="num">{{ n }}</td>
-        <td class="num small muted nowrap">{{ last|dt("%b %-d, %Y") if last else "—" }}</td>
-        <td class="num">{% if can('log_plays') %}<a class="btn sm" href="/plays/new?game={{ g.id }}">Log</a>{% endif %}</td>
+        <td class="num small muted nowrap hide-sm">{{ last|dt("%b %-d, %Y") if last else "—" }}</td>
+        <td class="num">{% if can('log_plays') and not (g.is_box and count) %}<a class="btn sm" href="/plays/new?game={{ g.id }}" aria-label="Log a play of {{ g.name }}">Log</a>{% endif %}</td>
       </tr>
+    {% endmacro %}
+    {% for e in entries %}
+      {{ game_row(e.game, e.plays, e.last, count=e.children|length) }}
+      {% for c, n, last in e.children %}{{ game_row(c, n, last, sub=true) }}{% endfor %}
     {% endfor %}
     </tbody>
   </table></div>

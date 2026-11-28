@@ -12,7 +12,7 @@ from .. import media, notify
 from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
 from ..db import get_db
-from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore, utcnow
+from ..models import CategoryScore, Game, Play, PlaySeat, Player, Round, RoundScore, natural_key, utcnow
 from ..scoring import PlayPayload, compute
 from ..stats import color_for
 from ..templating import flash, render
@@ -47,7 +47,9 @@ def can_edit(request: Request, user: Player, play: Play) -> bool:
 
 def _form_context(db: Session, user: Player, play: Play | None, state: dict, error: str | None = None) -> dict:
     games = db.scalars(select(Game).where(Game.archived.is_(False)).order_by(Game.name)
-                       .options(selectinload(Game.categories))).all()
+                       .options(selectinload(Game.categories), selectinload(Game.children))).all()
+    # A box of games (e.g. a Jackbox pack) isn't played itself: log the mini-game. Kept if this play already uses one.
+    games = [g for g in games if not (g.is_box and g.children) or (play is not None and g.id == play.game_id)]
     if play is not None and play.game not in games:
         games = [play.game, *games]
     seated_ids = {s.player_id for s in play.seats} if play else set()
@@ -76,6 +78,7 @@ def _form_context(db: Session, user: Player, play: Play | None, state: dict, err
         "play": play,
         "error": error,
         "games": games,
+        "game_groups": _game_groups(games),
         "locations": locations,
         "boot": {
             "games": [{"id": g.id, "name": g.name, "scoring": g.scoring, "uses_rounds": g.uses_rounds,
@@ -88,6 +91,42 @@ def _form_context(db: Session, user: Player, play: Play | None, state: dict, err
             "state": state,
         },
     }
+
+
+def _filter_games(db: Session) -> list[tuple[Game, bool]]:
+    """Plays filter: every game, each box's mini-games / base game's variants right after it, as (game, nested)."""
+    all_games = db.scalars(select(Game).options(selectinload(Game.children))).all()
+    ids = {g.id for g in all_games}
+    out: list[tuple[Game, bool]] = []
+    for g in sorted(all_games, key=lambda g: natural_key(g.name)):
+        if g.parent_id in ids:
+            continue
+        out.append((g, False))
+        out.extend((c, True) for c in sorted(g.children, key=lambda c: natural_key(c.name)))
+    return out
+
+
+def _game_groups(games: list[Game]) -> list[tuple[Game | None, list[Game]]]:
+    """For the game <select>: standalone games as (None, [game]); a box's mini-games as (box, [mini-games]);
+    a game with variants as (game, [game, variants...]). Name order; a group sorts by its head's name."""
+    listed = {g.id for g in games}
+    groups: dict[int, tuple[Game, list[Game]]] = {}
+    out: list[tuple[Game | None, list[Game]]] = []
+    for g in games:
+        if g.parent is not None and not g.parent.archived and (g.in_box or g.parent_id in listed):
+            head = g.parent
+        elif not g.is_box and any(c.id in listed for c in g.children):
+            head = g  # a base game heads its own group, with its variants
+        else:
+            out.append((None, [g]))
+            continue
+        if head.id not in groups:
+            groups[head.id] = (head, [])
+            out.append(groups[head.id])
+        groups[head.id][1].append(g)
+    for head, members in groups.values():
+        members.sort(key=lambda m: (m.id != head.id, natural_key(m.name)))
+    return sorted(out, key=lambda t: natural_key((t[0] or t[1][0]).name))
 
 
 def _state_from_play(play: Play) -> dict:
@@ -183,10 +222,13 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
 
 @router.get("")
 def list_plays(request: Request, game: int | None = None, player: int | None = None, page: int = 1,
-               user: Player = Depends(current_user), db: Session = Depends(get_db)):
+               exact: bool = False, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     q = select(Play).options(selectinload(Play.game), selectinload(Play.seats).selectinload(PlaySeat.player))
     if game:
-        q = q.where(Play.game_id == game)
+        # a box's mini-games / a game's variants are included, unless exact (just that one game)
+        g = db.get(Game, game)
+        ids = [game, *(c.id for c in g.children)] if g is not None and not exact else [game]
+        q = q.where(Play.game_id.in_(ids))
     if player:
         q = q.where(Play.seats.any(PlaySeat.player_id == player))
     total = db.scalar(select(func.count()).select_from(q.subquery()))
@@ -194,9 +236,9 @@ def list_plays(request: Request, game: int | None = None, player: int | None = N
     plays = db.scalars(q.order_by(Play.played_at.desc(), Play.id.desc()).offset((page - 1) * PAGE).limit(PAGE)).all()
     return render(request, "plays/list.html", {
         "plays": plays, "page": page, "pages": max(1, -(-total // PAGE)), "total": total,
-        "games": db.scalars(select(Game).order_by(Game.name)).all(),
+        "games": _filter_games(db),
         "players": db.scalars(select(Player).order_by(Player.display_name)).all(),
-        "f_game": game, "f_player": player,
+        "f_game": game, "f_player": player, "f_exact": exact,
     })
 
 

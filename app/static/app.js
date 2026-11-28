@@ -92,6 +92,14 @@ window.GN = (() => {
   window.addEventListener("online", netBadge);
   window.addEventListener("offline", netBadge);
   document.addEventListener("DOMContentLoaded", netBadge);
+  // On phones the tab row scrolls sideways: bring the current page's tab into view.
+  document.addEventListener("DOMContentLoaded", () => {
+    const on = document.querySelector(".nav a.on"), nav = on && on.parentElement;
+    if (nav && nav.scrollWidth > nav.clientWidth) {
+      nav.scrollLeft += on.getBoundingClientRect().left - nav.getBoundingClientRect().left
+        - (nav.clientWidth - on.offsetWidth) / 2;
+    }
+  });
 
   return { tab, lineChart, forget };
 })();

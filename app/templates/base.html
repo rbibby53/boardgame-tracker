@@ -20,11 +20,11 @@
 {% if settings.dev_mode %}<div class="devbar">DEV MODE: SSO is disabled. Do not expose this instance.</div>{% endif %}
 <header class="topbar">
   <div class="inner">
-    <a class="brand" href="/"><img src="/static/favicon.svg" alt="" width="22" height="22">{{ settings.app_name }}</a>
+    <a class="brand" href="/"><img src="/static/favicon.svg" alt="" width="22" height="22"><span class="brand-name">{{ settings.app_name }}</span></a>
     {% if user %}
     {% set path = request.url.path %}
     <nav class="nav">
-      <a href="/" class="{{ 'on' if path == '/' }}">Dashboard</a>
+      <a href="/" class="{{ 'on' if path == '/' }}"><span class="hide-sm">Dashboard</span><span class="show-sm">Home</span></a>
       <a href="/plays" class="{{ 'on' if path.startswith('/plays') and path != '/plays/new' }}">Plays</a>
       <a href="/nights" class="{{ 'on' if path.startswith('/nights') }}">Nights</a>
       <a href="/games" class="{{ 'on' if path.startswith('/games') }}">Games</a>
@@ -35,7 +35,7 @@
     <div class="me">
       {% if can('log_plays') %}<a class="btn primary sm" href="/plays/new">+ Log play</a>{% endif %}
       <a href="/players/{{ user.id }}" title="{{ user.display_name }}">{{ avatar(user) }}</a>
-      <form method="post" action="/logout" onsubmit="GN.forget()"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out">Sign out</button></form>
+      <form method="post" action="/logout" onsubmit="GN.forget()"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost sm" title="Sign out" aria-label="Sign out"><svg class="show-sm" aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg><span class="hide-sm">Sign out</span></button></form>
     </div>
     {% endif %}
   </div>
