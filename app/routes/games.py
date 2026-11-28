@@ -9,7 +9,8 @@ from collections import Counter
 from .. import bgg, media, ratings, stats
 from ..auth import current_user, require, verify_csrf
 from ..db import get_db
-from ..models import SCORING_TYPES, CategoryScore, Game, GameCategory, Play, Player, natural_key
+from ..models import (SCORING_TYPES, CategoryScore, Favorite, Game, GameCategory, GameExpansion, Play, Player,
+                      natural_key, play_expansions)
 from ..templating import flash, render
 
 router = APIRouter(prefix="/games")
@@ -117,9 +118,54 @@ async def _read_game_form(request: Request, game: Game, db: Session) -> str | No
     game.min_players, game.max_players, game.bgg_id = mn, mx, bgg
     game.play_time_min, game.year = pt, yr
     game.notes = (form.get("notes") or "").strip() or None
+    names = [n.strip()[:100] for n in (form.get("round_names") or "").splitlines() if n.strip()]
+    if len(names) > 50:
+        return "Keep the round names to 50 or fewer."
+    game.round_names = "\n".join(names) or None
     game.is_box = form.get("is_box") == "on"
     err = _read_parent(db, game, form.get("parent_id"))
-    return err or _sync_categories(db, game, form.get("categories") or "")
+    return err or _sync_categories(db, game, form.get("categories") or "") or _sync_expansions(db, game, form)
+
+
+def _sync_expansions(db: Session, game: Game, form) -> str | None:
+    """Expansion rows from the game form: exp_id_N / exp_name_N / exp_owned_N. A blank name removes the row;
+    one that's been used on a play is archived instead, so old plays keep it."""
+    try:
+        n = min(int(form.get("exp_count") or 0), 80)
+    except ValueError:
+        n = 0
+    by_id = {e.id: e for e in game.expansions if e.id is not None}
+    keep: set[int] = set()
+    seen: set[str] = set()
+    pos = 0
+    for i in range(n):
+        name = (form.get(f"exp_name_{i}") or "").strip()[:150]
+        if not name:
+            continue
+        if name.lower() in seen:
+            return f"'{name}' is listed twice under expansions."
+        seen.add(name.lower())
+        try:
+            eid = _int_or_none(form.get(f"exp_id_{i}"))
+        except ValueError:
+            eid = None
+        e = by_id.get(eid) or next((x for x in game.expansions if x.name.lower() == name.lower()), None)
+        if e is None:
+            e = GameExpansion(name=name)
+            game.expansions.append(e)
+        e.name, e.owned, e.position, e.archived = name, form.get(f"exp_owned_{i}") == "on", pos, False
+        pos += 1
+        keep.add(id(e))
+    for e in list(game.expansions):
+        if id(e) in keep:
+            continue
+        used = e.id is not None and db.scalar(select(func.count()).select_from(play_expansions)
+                                              .where(play_expansions.c.expansion_id == e.id))
+        if used:
+            e.archived, e.position = True, 1000 + e.position
+        else:
+            game.expansions.remove(e)
+    return None
 
 
 def _read_parent(db: Session, game: Game, raw) -> str | None:
@@ -158,18 +204,25 @@ def _parent_choices(db: Session, exclude: Game | None = None) -> tuple[list[Game
     return [g for g in top if g.is_box], [g for g in top if not g.is_box]
 
 
+def _favorite_ids(db: Session, user: Player) -> set[int]:
+    return set(db.scalars(select(Favorite.game_id).where(Favorite.player_id == user.id)).all())
+
+
 def _form_ctx(db: Session, game: Game | None, **extra) -> dict:
     boxes, games = _parent_choices(db, exclude=game)
     return {"bgg_enabled": bgg.enabled(), "game": game, "boxes": boxes, "base_games": games, **extra}
 
 
 @router.get("")
-def list_games(request: Request, archived: bool = False, shelf: bool = False, user: Player = Depends(current_user),
-               db: Session = Depends(get_db)):
+def list_games(request: Request, archived: bool = False, shelf: bool = False, fav: bool = False,
+               user: Player = Depends(current_user), db: Session = Depends(get_db)):
+    favs = _favorite_ids(db, user)
     q = (select(Game, func.count(Play.id), func.max(Play.played_at)).outerjoin(Play)
          .where(Game.archived.is_(archived)).group_by(Game.id).order_by(Game.name))
     if shelf:
         q = q.where(Game.owned.is_(True))
+    if fav:
+        q = q.where(Game.id.in_(favs or {-1}))
     rows = db.execute(q).all()
     # Mini-games and variants are listed under their box / base game; one whose parent isn't in this view
     # (archived, or off the shelf) stands alone with a "part of" / "variant of" note.
@@ -189,7 +242,8 @@ def list_games(request: Request, archived: bool = False, shelf: bool = False, us
     entries.sort(key=lambda e: natural_key(e["game"].name))
     any_owned = bool(db.scalar(select(func.count(Game.id)).where(Game.owned.is_(True))))
     return render(request, "games/list.html", {"entries": entries, "archived": archived, "shelf": shelf,
-                                               "any_owned": any_owned})
+                                               "any_owned": any_owned, "fav": fav, "favs": favs,
+                                               "here": str(request.url.path) + ("?" + request.url.query if request.url.query else "")})
 
 
 @router.get("/new")
@@ -229,6 +283,10 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
         raise HTTPException(404)
     kids = sorted(game.children, key=lambda c: natural_key(c.name))
     rt = ratings.table(db)
+    is_fav = game.id in _favorite_ids(db, user)
+    exp_uses = dict(db.execute(select(play_expansions.c.expansion_id, func.count())
+                               .where(play_expansions.c.expansion_id.in_([e.id for e in game.expansions] or [-1]))
+                               .group_by(play_expansions.c.expansion_id)).all())
     if game.is_box and kids:
         # A box: plays and standings across its mini-games. Scores, records, score sheets and ratings belong
         # to each mini-game (they score differently), so those stay on the mini-game pages.
@@ -236,7 +294,7 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
         records = stats.records(game, plays)
         records.update(best=None, margin=None)
         return render(request, "games/show.html", {
-            "game": game, "rt": rt, "box_view": True, "kids": kids, "kid_plays": _count_by_game(plays),
+            "game": game, "rt": rt, "box_view": True, "is_fav": is_fav, "exp_uses": exp_uses, "kids": kids, "kid_plays": _count_by_game(plays),
             "span": _player_span(kids), "rating_series": None, "board": stats.leaderboard(plays, include_coop=True),
             "records": records, "recent": list(reversed(plays[-10:])), "play_count": len(plays),
             "score_series": None, "sheet": None, "wins_series": stats.cumulative_wins_series(plays),
@@ -252,6 +310,8 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
     return render(request, "games/show.html", {
         "game": game,
         "rt": rt,
+        "is_fav": is_fav,
+        "exp_uses": exp_uses,
         "box_view": False,
         "kids": kids,
         "kid_plays": kid_plays,
@@ -269,6 +329,25 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
 
 def _count_by_game(plays: list[Play]) -> Counter:
     return Counter(p.game_id for p in plays)
+
+
+@router.post("/{game_id}/favorite", dependencies=[Depends(verify_csrf)])
+async def toggle_favorite(game_id: int, request: Request, user: Player = Depends(current_user),
+                          db: Session = Depends(get_db)):
+    """Star / unstar a game for the signed-in player. Anyone signed in can keep favorites."""
+    if db.get(Game, game_id) is None:
+        raise HTTPException(404)
+    fav = db.get(Favorite, (user.id, game_id))
+    if fav:
+        db.delete(fav)
+    else:
+        db.add(Favorite(player_id=user.id, game_id=game_id))
+    db.commit()
+    if "application/json" in request.headers.get("accept", ""):
+        return {"favorite": fav is None}
+    nxt = (await request.form()).get("next") or ""
+    return RedirectResponse(nxt if nxt.startswith("/") and not nxt.startswith("//") else f"/games/{game_id}",
+                            status_code=303)
 
 
 @router.get("/{game_id}/edit")

@@ -2,12 +2,12 @@ import random
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from ..auth import current_user
 from ..db import get_db
-from ..models import Game, Play, Player, Poll
+from ..models import Favorite, Game, Play, Player, Poll
 from ..templating import render
 
 router = APIRouter()
@@ -28,13 +28,16 @@ def pick(request: Request, players: str | None = None, minutes: str | None = Non
     n, limit = _int(players), _int(minutes)
     sort = sort if sort in SORTS else "stale"
     any_owned = bool(db.scalar(select(func.count(Game.id)).where(Game.owned.is_(True), Game.archived.is_(False))))
-    if shelf not in ("own", "all"):
+    favs = set(db.scalars(select(Favorite.game_id).where(Favorite.player_id == user.id)).all())
+    if shelf not in ("own", "all", "fav") or (shelf == "fav" and not favs):
         shelf = "own" if any_owned else "all"
     q = (select(Game, func.count(Play.id), func.max(Play.played_at), func.avg(Play.duration_min))
          .outerjoin(Play).where(Game.archived.is_(False)).group_by(Game.id)
          .options(selectinload(Game.children), selectinload(Game.parent)))
     if shelf == "own":
         q = q.where(Game.owned.is_(True))
+    elif shelf == "fav":  # a starred box (Jackbox pack) brings its mini-games
+        q = q.where(or_(Game.id.in_(favs), Game.parent_id.in_(favs)))
     rows = db.execute(q).all()
 
     results = []
@@ -68,6 +71,7 @@ def pick(request: Request, players: str | None = None, minutes: str | None = Non
                             .limit(5)).all()
     return render(request, "pick.html", {
         "results": results, "chosen": chosen, "sorts": SORTS, "any_owned": any_owned, "open_polls": open_polls,
+        "has_favs": bool(favs),
         "f": {"players": n, "minutes": limit, "sort": sort, "shelf": shelf},
         "searched": players is not None or minutes is not None,
         "vote_title": "What should we play" + (f" ({n} players)" if n else "") + "?",

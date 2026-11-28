@@ -53,6 +53,8 @@
       {% if game and game.in_box %}<div class="hint">Follows {{ game.parent.name }}.</div>{% endif %}</div>
     <div><label for="round_label">What's a round called? <span class="hint">Round, Hand, Era, Age…</span></label>
       <input type="text" id="round_label" name="round_label" maxlength="40" placeholder="Round" value="{{ val('round_label', game.round_label if game and game.round_label else '') }}"></div>
+    <div class="wide"><label for="round_names">Round names <span class="hint">optional, one per line, in order. Mexican Train: Double 12, Double 11 … Double blank. Rounds past the list are numbered.</span></label>
+      <textarea id="round_names" name="round_names" rows="3" placeholder="Double 12&#10;Double 11&#10;…">{{ val('round_names', game.round_names if game and game.round_names else '') }}</textarea></div>
     <div><label for="min_players">Min players</label>
       <input type="number" id="min_players" name="min_players" min="1" value="{{ val('min_players', game.min_players if game and game.min_players else '') }}"></div>
     <div><label for="max_players">Max players</label>
@@ -67,6 +69,23 @@
       {% set cats = (game.active_categories|map(attribute="name")|join("\n")) if game else "" %}
       <textarea id="categories" name="categories" rows="5" placeholder="Military&#10;Coins&#10;Wonders&#10;Science">{{ val('categories', cats) }}</textarea>
       {% if game and game.categories|selectattr("archived")|list %}<div class="hint">Removed lines that have saved scores are kept on old plays.</div>{% endif %}</div>
+    <div class="wide">
+      <span class="label-like">Expansions <span class="hint">and extensions (Seafarers, 5–6 Player Extension…). Tick the ones we have; clear a name to remove it.</span></span>
+      {% set exps = game.active_expansions if game else [] %}
+      {% set blank = 3 if exps else 4 %}
+      <input type="hidden" name="exp_count" value="{{ exps|length + blank }}">
+      <div class="exp-rows">
+        {% for e in exps %}
+        <div class="exp-row"><input type="hidden" name="exp_id_{{ loop.index0 }}" value="{{ e.id }}">
+          <input type="text" name="exp_name_{{ loop.index0 }}" value="{{ e.name }}" maxlength="150" aria-label="Expansion name">
+          <label class="check"><input type="checkbox" name="exp_owned_{{ loop.index0 }}" {{ 'checked' if e.owned }}> We have it</label></div>
+        {% endfor %}
+        {% for i in range(exps|length, exps|length + blank) %}
+        <div class="exp-row"><input type="text" name="exp_name_{{ i }}" maxlength="150" placeholder="{{ 'Add an expansion…' if loop.first else '' }}" aria-label="New expansion name">
+          <label class="check"><input type="checkbox" name="exp_owned_{{ i }}"> We have it</label></div>
+        {% endfor %}
+      </div>
+    </div>
     <div class="wide"><label for="notes">Notes <span class="hint">house rules, setup reminders</span></label>
       <textarea id="notes" name="notes">{{ val('notes', game.notes if game and game.notes else '') }}</textarea></div>
   </div>

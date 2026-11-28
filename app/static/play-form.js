@@ -27,7 +27,11 @@
     winners_manual: !!init.winners_manual,
     coop_won: !!init.coop_won,
     use_rounds: init.use_rounds ?? (init.rounds || []).length > 0,
+    mode: init.mode || null,   // "wins" | "points" for points games kept by round; null = game's last-used mode
+    expansions: (init.expansions || []).map(Number),
+    teams: (init.players || []).some((s) => s.team),
   };
+  let chipFilter = "", showAllChips = false, showAllExp = false;
 
   const gameSel = $("game_id");
   if (init.game_id) gameSel.value = String(init.game_id);
@@ -53,7 +57,10 @@
   }
   form.addEventListener("input", saveDraft);
   form.addEventListener("change", saveDraft);
-  $("draftDiscard").onclick = () => { store.clear(); location.href = location.pathname + location.search; };
+  $("draftDiscard").onclick = () => {
+    if (!confirm("Throw away this unsaved play? The scores you entered will be lost.")) return;
+    store.clear(); location.href = location.pathname + location.search;
+  };
 
   function restoreDraft() {
     const d = store.get();
@@ -78,6 +85,15 @@
   const sheetOn = () => state.use_sheet && sheetAllowed();
   const sheetCats = () => (game() ? game().categories.filter((c) => !c.archived || Object.keys(state.categories[c.id] || {}).length) : []);
   const roundsOn = () => state.use_rounds && scoring() !== "coop" && !sheetOn();
+  // A points game (high/low) kept by round can be scored just by who won each round instead ("wins").
+  const modeAllowed = () => roundsOn() && ["high", "low"].includes(scoring());
+  const mode = () => (modeAllowed() ? (state.mode || (game() && game().last_mode) || "points") : null);
+  const eff = () => (mode() === "wins" ? "winloss" : scoring());
+  const byWins = () => roundsOn() && eff() === "winloss";
+  const roundName = (i) => {
+    const names = (game() && game().round_names) || [];
+    return names[i] || `${roundWord()} ${i + 1}`;
+  };
 
   const HINTS = {
     high: "Highest score wins.",
@@ -115,11 +131,20 @@
     renderAll();
   }
 
+  const CHIP_LIMIT = 12;
   function renderChips() {
     const box = $("playerChips");
     box.replaceChildren();
-    const order = [...boot.players].sort((a, b) => seated(b.id) - seated(a.id));
-    for (const p of order) {
+    // seated first, then whoever played most recently, then by name
+    const order = [...boot.players].sort((a, b) => (seated(b.id) - seated(a.id))
+      || ((b.last || "") > (a.last || "") ? 1 : (b.last || "") < (a.last || "") ? -1 : 0)
+      || a.name.localeCompare(b.name));
+    const many = order.length > CHIP_LIMIT;
+    $("chipSearchWrap").hidden = !many;
+    const q = chipFilter.trim().toLowerCase();
+    const shown = order.filter((p) => seated(p.id) || (q ? p.name.toLowerCase().includes(q) : true));
+    const visible = q || showAllChips || !many ? shown : shown.slice(0, Math.max(CHIP_LIMIT, state.players.length));
+    for (const p of visible) {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = "chip" + (seated(p.id) ? " on" : "");
@@ -128,10 +153,19 @@
       chip.onclick = () => togglePlayer(p.id);
       box.append(chip);
     }
+    if (q && visible.length === state.players.length) {
+      const none = document.createElement("span"); none.className = "hint"; none.textContent = `Nobody else called "${chipFilter.trim()}".`;
+      box.append(none);
+    }
+    const more = $("chipMore");
+    more.hidden = !many || !!q || showAllChips || shown.length <= visible.length;
+    more.textContent = `Show everyone (${order.length})`;
     const g = game();
     const last = g && boot.last_lineup[g.id];
     $("sameAsLast").hidden = !last || !last.length;
   }
+  $("chipMore").onclick = () => { showAllChips = true; renderChips(); };
+  $("chipSearch").addEventListener("input", (e) => { chipFilter = e.target.value; renderChips(); });
 
   $("sameAsLast").onclick = () => {
     const g = game();
@@ -167,14 +201,128 @@
   $("addGuest").onclick = addGuest;
   $("guestName").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addGuest(); } });
 
+  // ------------------------------------------------------------ expansions ("Playing with")
+  function renderExpansions() {
+    const g = game();
+    const all = (g && g.expansions) || [];
+    $("expWrap").hidden = !all.length;
+    // with expansions listed above, the free-text box is just for house rules
+    $("expTextLabel").textContent = all.length ? "House rules / other notes" : "Expansions / house rules";
+    const box = $("expChips");
+    box.replaceChildren();
+    if (!all.length) return;
+    const on = (e) => state.expansions.includes(e.id);
+    const owned = all.filter((e) => e.owned || on(e));
+    const others = all.filter((e) => !e.owned && !on(e));
+    for (const e of showAllExp || !owned.length ? [...owned, ...others] : owned) {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip" + (on(e) ? " on" : "") + (e.owned ? "" : " not-owned");
+      chip.setAttribute("aria-pressed", on(e));
+      chip.textContent = (on(e) ? "✓ " : "") + e.name + (e.owned ? "" : " (not ours)");
+      chip.onclick = () => {
+        state.expansions = on(e) ? state.expansions.filter((x) => x !== e.id) : [...state.expansions, e.id];
+        renderExpansions(); saveDraft();
+      };
+      box.append(chip);
+    }
+    const more = $("expMore");
+    more.hidden = showAllExp || !owned.length || !others.length;
+    more.textContent = `Show the ones we don't have (${others.length})`;
+  }
+  $("expMore").onclick = () => { showAllExp = true; renderExpansions(); };
+
+  // ------------------------------------------------------------ find a game (the list is long)
+  const allGameOptions = gameSel.innerHTML;
+  $("gameFilter").addEventListener("input", (ev) => {
+    const q = ev.target.value.trim().toLowerCase();
+    const keep = gameSel.value;
+    gameSel.innerHTML = allGameOptions;
+    if (q) {
+      for (const o of [...gameSel.querySelectorAll("option")]) if (o.value && !o.textContent.toLowerCase().includes(q)) o.remove();
+      for (const og of [...gameSel.querySelectorAll("optgroup")]) if (!og.children.length) og.remove();
+    }
+    const ids = new Set([...gameSel.options].map((o) => o.value).filter(Boolean));
+    gameSel.options[0].textContent = q ? (ids.size ? `${ids.size} game${ids.size === 1 ? "" : "s"} match…` : "No games match") : "Choose a game…";
+    if (ids.size === 1 && !ids.has(keep)) { gameSel.value = [...ids][0]; gameSel.dispatchEvent(new Event("change")); }
+    else if (ids.has(keep)) gameSel.value = keep;
+  });
+
   // ------------------------------------------------------------ rounds
+  function renderMode() {
+    const allowed = modeAllowed();
+    $("modeBox").hidden = !allowed;
+    if (allowed) document.querySelector(`#modeBox input[value=${mode()}]`).checked = true;
+    const lower = scoring() === "low";
+    document.querySelector("#modeBox input[value=wins] + span strong").textContent = `Who won each ${roundWord().toLowerCase()}`;
+    $("modeHint").textContent = !roundsOn() ? "" : byWins()
+      ? `Tap who won each ${roundWord().toLowerCase()}. Whoever wins the most ${roundWord().toLowerCase()}s wins the game.`
+      : `Type each player's points for every ${roundWord().toLowerCase()}. ${lower ? "Lowest" : "Highest"} total wins.`;
+  }
+  document.querySelectorAll("#modeBox input").forEach((r) => {
+    r.onchange = () => { state.mode = r.value; state.winners_manual = false; renderAll(); };
+  });
+
+  function removeRound(i) {
+    const r = state.rounds[i];
+    if ((Object.values(r.scores).some((v) => v !== null) || r.won.length)
+        && !confirm(`Remove ${roundName(i)}? Its scores will be lost.`)) return;
+    state.rounds.splice(i, 1);
+    renderRounds(); refresh();
+  }
+
+  function delButton(i) {
+    const db = document.createElement("button");
+    db.type = "button"; db.className = "btn sm ghost round-del"; db.textContent = "✕";
+    db.setAttribute("aria-label", `Remove ${roundName(i)}`);
+    db.onclick = () => removeRound(i);
+    return db;
+  }
+
   function renderRounds() {
     const on = roundsOn();
     $("roundsWrap").hidden = !on;
-    const table = $("roundsTable");
-    table.replaceChildren();
+    const table = $("roundsTable"), list = $("roundsList");
+    table.replaceChildren(); list.replaceChildren();
     if (!on) return;
     if (!state.rounds.length) state.rounds.push({ label: "", scores: {}, won: [] });
+    const wins = byWins();
+    $("roundsGrid").hidden = wins;
+    list.hidden = !wins;
+    $("addRound").textContent = `+ Next ${roundWord().toLowerCase()}: ${roundName(state.rounds.length)}`;
+
+    if (wins) {
+      // one row per round: tap the player who won it
+      state.rounds.forEach((r, i) => {
+        const row = document.createElement("div");
+        row.className = "round-row";
+        const head = document.createElement("div");
+        head.className = "round-head";
+        const t = document.createElement("strong"); t.textContent = r.label || roundName(i);
+        head.append(t, delButton(i));
+        const pick = document.createElement("div");
+        pick.className = "round-pick";
+        pick.setAttribute("role", "group");
+        pick.setAttribute("aria-label", `Who won ${r.label || roundName(i)}?`);
+        for (const s of state.players) {
+          const p = players.get(s.player_id);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          const on = r.won.includes(s.player_id);
+          btn.className = "pick-btn" + (on ? " on" : "");
+          btn.setAttribute("aria-pressed", on);
+          btn.textContent = (on ? "🏆 " : "") + p.name;
+          btn.onclick = () => {
+            r.won = on ? [] : [s.player_id];          // one winner per round; tap again to clear
+            renderRounds(); refresh();
+          };
+          pick.append(btn);
+        }
+        row.append(head, pick);
+        list.append(row);
+      });
+      return;
+    }
 
     const thead = table.createTHead().insertRow();
     thead.append(document.createElement("th"));
@@ -185,64 +333,41 @@
       thead.append(th);
     }
     thead.append(document.createElement("th"));
-
     const tbody = table.createTBody();
-    const showPoints = scoring() !== "winloss";
     state.rounds.forEach((r, i) => {
       const tr = tbody.insertRow();
       const lc = tr.insertCell();
       lc.className = "rl";
-      const li = document.createElement("input");
-      li.type = "text"; li.value = r.label; li.placeholder = `${roundWord()} ${i + 1}`; li.maxLength = 100;
-      li.oninput = () => { r.label = li.value; };
-      lc.append(li);
+      lc.textContent = r.label || roundName(i);
       for (const s of state.players) {
-        const td = tr.insertCell();
-        const cell = document.createElement("div");
-        cell.className = "cell";
-        if (showPoints) {
-          const inp = document.createElement("input");
-          inp.type = "number"; inp.step = "any"; inp.inputMode = "decimal";
-          inp.value = r.scores[s.player_id] ?? "";
-          inp.oninput = () => { r.scores[s.player_id] = num(inp.value); refresh(); };
-          cell.append(inp);
-        }
-        const wl = document.createElement("label");
-        wl.className = "won-toggle";
-        const cb = document.createElement("input");
-        cb.type = "checkbox"; cb.checked = r.won.includes(s.player_id);
-        cb.onchange = () => {
-          r.won = cb.checked ? [...new Set([...r.won, s.player_id])] : r.won.filter((w) => w !== s.player_id);
-          refresh();
-        };
-        wl.append(cb, document.createTextNode("won"));
-        cell.append(wl);
-        td.append(cell);
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = "any"; inp.inputMode = "decimal";
+        inp.setAttribute("aria-label", `${players.get(s.player_id).name}, ${r.label || roundName(i)}`);
+        inp.value = r.scores[s.player_id] ?? "";
+        inp.oninput = () => { r.scores[s.player_id] = num(inp.value); refresh(); };
+        tr.insertCell().append(inp);
       }
-      const del = tr.insertCell();
-      const db = document.createElement("button");
-      db.type = "button"; db.className = "btn sm ghost"; db.textContent = "✕"; db.title = "Remove";
-      db.onclick = () => { state.rounds.splice(i, 1); renderRounds(); refresh(); };
-      del.append(db);
+      tr.insertCell().append(delButton(i));
     });
-
     const tf = table.createTFoot().insertRow();
     tf.insertCell().innerHTML = "<strong>Total</strong>";
-    for (const s of state.players) {
-      const td = tf.insertCell();
-      td.dataset.total = s.player_id;
-    }
+    for (const s of state.players) tf.insertCell().dataset.total = s.player_id;
     tf.insertCell();
   }
 
   $("addRound").onclick = () => {
     state.rounds.push({ label: "", scores: {}, won: [] });
     renderRounds(); refresh();
-    const rows = $("roundsTable").tBodies[0].rows;
-    const first = rows[rows.length - 1].querySelector("input[type=number]");
-    if (first) first.focus();
+    if (!byWins()) {
+      const rows = $("roundsTable").tBodies[0].rows;
+      const first = rows[rows.length - 1].querySelector("input[type=number]");
+      if (first) first.focus();
+    } else {
+      const rows = $("roundsList").children;
+      rows[rows.length - 1].scrollIntoView({ block: "center", behavior: "smooth" });
+    }
   };
-  $("useRounds").onchange = (e) => { state.use_rounds = e.target.checked; renderRounds(); renderSeats(); refresh(); };
+  $("useRounds").onchange = (e) => { state.use_rounds = e.target.checked; renderAll(); };
 
   // ------------------------------------------------------------ score sheet
   function renderSheet() {
@@ -299,10 +424,11 @@
       return { t, w };
     }
     if (!roundsOn()) return { t, w };
+    const wins = byWins();
     for (const r of state.rounds) {
       for (const s of state.players) {
         const v = r.scores[s.player_id];
-        if (v !== null && v !== undefined) t[s.player_id] = (t[s.player_id] ?? 0) + v;
+        if (!wins && v !== null && v !== undefined) t[s.player_id] = (t[s.player_id] ?? 0) + v;
         if (r.won.includes(s.player_id)) w[s.player_id] += 1;
       }
     }
@@ -314,7 +440,7 @@
     const final = {};
     for (const s of state.players) final[s.player_id] = s.score ?? t[s.player_id];
     let winners = new Set();
-    const sc = scoring();
+    const sc = eff();
     if (sc === "coop") {
       if (state.coop_won) winners = new Set(state.players.map((s) => s.player_id));
     } else if (state.winners_manual) {
@@ -332,29 +458,36 @@
     return { t, w, final, winners };
   }
 
+  // Final scores / winners per player. For games kept by round or on a score sheet the totals come from there,
+  // so these live under "More options" (override a total, pick the winner by hand, teams).
   function renderSeats() {
-    const sc = scoring();
+    const sc = eff();
+    const derived = roundsOn() || sheetOn();
     const box = $("seats");
     box.replaceChildren();
+    (derived ? $("moreSeats") : $("seatsBox")).append($("seatsInner"));
+    $("moreBox").hidden = sc === "coop" || !state.players.length;
+    $("moreSummary").textContent = derived ? "More options: adjust totals, pick the winner, teams" : "More options: teams";
     $("coopBox").hidden = sc !== "coop";
-    $("winnerMode").hidden = sc === "coop";
+    const pickable = sc !== "coop" && !(sc === "winloss" && !roundsOn());
+    $("winnerMode").hidden = !pickable;
     $("coopWon").checked = state.coop_won;
+    $("useTeams").checked = state.teams;
     document.querySelector(`#winnerMode input[value=${state.winners_manual ? "manual" : "auto"}]`).checked = true;
+    $("standings").hidden = !derived || !state.players.length || sc === "coop";
 
     if (!state.players.length) {
       box.innerHTML = '<div class="empty">Pick who played above.</div>';
       return;
     }
-    const points = sc !== "winloss";
-    $("seatHint").textContent = points
-      ? (sheetOn() ? "Final score defaults to the sheet total. Type a number to override it."
-        : roundsOn() ? "Final score defaults to the round total. Type a number to override it." : "Final scores")
-      : "";
+    const points = sc === "high" || sc === "low";
+    $("seatHint").textContent = !points ? (sc === "winloss" && !roundsOn() ? "Tap the winner." : "")
+      : derived ? "Leave blank to use the total above, or type a number to replace it." : "Final scores";
 
     for (const s of state.players) {
       const p = players.get(s.player_id);
       const row = document.createElement("div");
-      row.className = "seat";
+      row.className = "seat" + (state.teams ? " has-team" : "");
       row.dataset.pid = s.player_id;
 
       const who = document.createElement("span");
@@ -364,26 +497,23 @@
       row.append(who);
 
       const scoreWrap = document.createElement("div");
-      if (points && sc !== "coop") {
+      if (points || sc === "coop") {
         const inp = document.createElement("input");
         inp.type = "number"; inp.step = "any"; inp.inputMode = "decimal";
         inp.value = s.score ?? ""; inp.setAttribute("aria-label", `${p.name} score`);
-        inp.className = "final-score";
-        inp.oninput = () => { s.score = num(inp.value); refresh(); };
-        scoreWrap.append(inp);
-      } else if (sc === "coop") {
-        const inp = document.createElement("input");
-        inp.type = "number"; inp.step = "any"; inp.inputMode = "decimal"; inp.placeholder = "score (optional)";
-        inp.value = s.score ?? "";
-        inp.oninput = () => { s.score = num(inp.value); };
+        if (sc === "coop") { inp.placeholder = "score (optional)"; inp.oninput = () => { s.score = num(inp.value); }; }
+        else { inp.className = "final-score"; inp.oninput = () => { s.score = num(inp.value); refresh(); }; }
         scoreWrap.append(inp);
       }
       row.append(scoreWrap);
 
-      const team = document.createElement("input");
-      team.type = "text"; team.placeholder = "Team"; team.value = s.team; team.maxLength = 60;
-      team.oninput = () => { s.team = team.value; };
-      row.append(team);
+      if (state.teams) {
+        const team = document.createElement("input");
+        team.type = "text"; team.placeholder = "Team"; team.value = s.team; team.maxLength = 60;
+        team.setAttribute("aria-label", `${p.name} team`);
+        team.oninput = () => { s.team = team.value; };
+        row.append(team);
+      }
 
       const wb = document.createElement("button");
       wb.type = "button"; wb.className = "btn sm win-btn";
@@ -403,6 +533,11 @@
       box.append(row);
     }
   }
+  $("useTeams").onchange = (e) => {
+    state.teams = e.target.checked;
+    if (!state.teams) state.players.forEach((s) => { s.team = ""; });
+    renderSeats(); refresh();
+  };
 
   document.querySelectorAll("#winnerMode input").forEach((r) => {
     r.onchange = () => {
@@ -418,21 +553,21 @@
 
   function refresh() {
     saveDraft();
-    const { t, w, winners } = preview();
-    const sc = scoring();
+    const { t, w, final, winners } = preview();
+    const sc = eff();
     document.querySelectorAll("#roundsTable [data-total]").forEach((td) => {
-      const pid = Number(td.dataset.total);
-      td.textContent = sc === "winloss" ? `${w[pid]} won` : fmt(t[pid]) + (w[pid] ? ` · ${w[pid]}★` : "");
+      td.textContent = fmt(t[Number(td.dataset.total)]);
     });
     document.querySelectorAll("#sheetTable [data-sheet-total]").forEach((td) => {
       td.textContent = fmt(t[Number(td.dataset.sheetTotal)]);
     });
+    renderStandings(sc, final, w, winners);
     document.querySelectorAll("#seats .seat").forEach((row) => {
       const pid = Number(row.dataset.pid);
       const isW = winners.has(pid);
       row.classList.toggle("is-winner", isW);
       const inp = row.querySelector("input.final-score");
-      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (${sheetOn() ? "sheet" : roundWord().toLowerCase() + "s"})` : "score";
+      if (inp) inp.placeholder = t[pid] !== null ? `${fmt(t[pid])} (total)` : "score";
       const wb = row.querySelector(".win-btn");
       if (sc === "coop") { wb.hidden = true; return; }
       wb.hidden = false;
@@ -441,10 +576,47 @@
     });
   }
 
+  // Live "who's winning" line above the rounds / sheet, so nobody has to scroll to the totals.
+  function renderStandings(sc, final, w, winners) {
+    const box = $("standings");
+    if (box.hidden) return;
+    const wins = byWins();
+    const played = state.rounds.filter((r) => r.won.length || Object.values(r.scores).some((v) => v !== null)).length;
+    const val = (pid) => (wins ? w[pid] : final[pid]);
+    const rows = state.players.map((s) => ({ pid: s.player_id, v: val(s.player_id) }));
+    const any = rows.some((r) => r.v !== null && r.v !== undefined && (!wins || r.v > 0));
+    const desc = wins || sc === "high";
+    rows.sort((a, b) => (a.v === null) - (b.v === null) || (desc ? b.v - a.v : a.v - b.v));
+    box.replaceChildren();
+    const head = document.createElement("div");
+    head.className = "standings-head";
+    const unit = roundWord().toLowerCase();
+    if (!any) head.textContent = sheetOn() ? "Fill in the sheet and the leader shows here." : `Scores show here after the first ${unit}.`;
+    else {
+      const lead = rows.filter((r) => winners.has(r.pid)).map((r) => players.get(r.pid).name);
+      const done = sheetOn() ? "" : `After ${played} ${unit}${played === 1 ? "" : "s"}: `;
+      head.textContent = done + (lead.length > 1 ? `${lead.join(" & ")} tied for the lead` : lead.length ? `${lead[0]} ${state.winners_manual ? "wins" : "leads"}` : "");
+    }
+    box.append(head);
+    if (!any) return;
+    const ul = document.createElement("ol");
+    ul.className = "standings-list";
+    for (const r of rows) {
+      const li = document.createElement("li");
+      li.className = winners.has(r.pid) ? "lead" : "";
+      const n = document.createElement("span"); n.textContent = players.get(r.pid).name;
+      const v = document.createElement("strong");
+      v.textContent = wins ? `${r.v} ${unit}${r.v === 1 ? "" : "s"}` : (r.v === null || r.v === undefined ? "—" : fmt(r.v));
+      li.append(n, v);
+      ul.append(li);
+    }
+    box.append(ul);
+  }
+
   function renderGameBits() {
     const g = game();
     const sc = scoring();
-    $("scoringHint").textContent = g ? HINTS[sc] : "";
+    $("scoringHint").textContent = g ? (byWins() && sc !== "winloss" ? "Most rounds won wins." : HINTS[sc]) : "";
     document.querySelectorAll("#roundWord, .rw").forEach((el) => { el.textContent = roundWord().toLowerCase(); });
     $("sheetToggleWrap").hidden = !sheetAllowed();
     $("useSheet").checked = sheetOn();
@@ -455,6 +627,8 @@
 
   function renderAll() {
     renderGameBits();
+    renderExpansions();
+    renderMode();
     renderChips();
     renderSheet();
     renderRounds();
@@ -464,6 +638,9 @@
 
   gameSel.onchange = () => {
     const g = game();
+    state.mode = null;  // use how this game was scored last time
+    showAllExp = false;
+    state.expansions = g ? (g.last_expansions || []).filter((id) => g.expansions.some((e) => e.id === id)) : [];
     if (g && !state.rounds.some((r) => Object.keys(r.scores).length || r.won.length)) {
       state.use_rounds = g.uses_rounds;
     }
@@ -479,26 +656,38 @@
     const g = game();
     if (!g) { e.preventDefault(); alert("Pick a game."); return; }
     if (!state.players.length) { e.preventDefault(); alert("Pick who played."); return; }
-    const sc = g.scoring;
+    const sc = eff();
     const useR = roundsOn();
     const useS = sheetOn();
     const ids = new Set(state.players.map((s) => s.player_id));
+    // In points mode the round winner is whoever had the best score that round (lowest for low-score games).
+    const autoWon = (scores) => {
+      const vals = Object.values(scores);
+      if (!vals.length || !["high", "low"].includes(sc)) return [];
+      const best = sc === "low" ? Math.min(...vals) : Math.max(...vals);
+      return Object.entries(scores).filter(([, v]) => v === best).map(([k]) => Number(k));
+    };
     const payload = {
       players: state.players.map((s) => ({
         player_id: s.player_id,
         score: sc === "winloss" ? null : s.score,
         winner: state.winners_manual ? s.winner : false,
-        team: s.team || null,
+        team: state.teams ? (s.team || null) : null,
       })),
       rounds: useR
         ? state.rounds
-            .map((r) => ({
-              label: r.label || null,
-              scores: Object.fromEntries(Object.entries(r.scores).filter(([k, v]) => ids.has(Number(k)) && v !== null && sc !== "winloss")),
-              won: r.won.filter((w) => ids.has(w)),
-            }))
-            .filter((r) => r.label || Object.keys(r.scores).length || r.won.length)
+            .map((r, i) => {
+              const scores = Object.fromEntries(Object.entries(r.scores).filter(([k, v]) => ids.has(Number(k)) && v !== null && sc !== "winloss"));
+              return {
+                label: r.label || roundName(i),
+                scores,
+                won: sc === "winloss" ? r.won.filter((w) => ids.has(w)) : autoWon(scores),
+              };
+            })
+            .filter((r) => Object.keys(r.scores).length || r.won.length)  // untouched rounds are dropped
         : [],
+      mode: mode(),
+      expansions: state.expansions.filter((id) => (g.expansions || []).some((e) => e.id === id)),
       categories: useS
         ? Object.fromEntries(sheetCats().map((c) => [c.id, Object.fromEntries(
             Object.entries(state.categories[c.id] || {}).filter(([k, v]) => ids.has(Number(k)) && v !== null))]))
@@ -508,7 +697,7 @@
     };
     if (sc === "winloss" && !payload.winners_manual && !payload.rounds.some((r) => r.won.length)) {
       e.preventDefault();
-      alert("Mark who won (or the round winners) before saving.");
+      alert(useR ? `Tap who won each ${roundWord().toLowerCase()} before saving.` : "Tap who won before saving.");
       return;
     }
     $("payload").value = JSON.stringify(payload);
