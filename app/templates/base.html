@@ -40,6 +40,8 @@
     {% endif %}
   </div>
 </header>
+{% set lb = live_bar() if user else none %}
+{% if lb %}<a class="live-bar" href="/live/{{ lb.id }}"><span class="live-dot-sm" aria-hidden="true"></span> You're at <strong>{{ lb.title }}</strong>{% if lb.now %} · {{ "you're keeping score for" if lb.keeper else "now playing" }} {{ lb.now }}{% endif %} <span aria-hidden="true">→</span></a>{% endif %}
 <main>
   {% if flash %}<div class="flash {{ flash.kind }}">{{ flash.message }}</div>{% endif %}
   {% block content %}{% endblock %}

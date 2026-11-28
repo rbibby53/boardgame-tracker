@@ -38,7 +38,10 @@
 
   // ------------------------------------------------------------ device draft (survives reloads / no signal)
   const form = $("playForm");
-  const DRAFT_KEY = "gn-draft:" + new URL(form.action, location.href).pathname;
+  // Live game night: the game in progress is kept on the server so everyone at the night sees the scores.
+  const LIVE = boot.live || null;
+  let liveVersion = LIVE ? LIVE.version : 0, liveTimer = null, liveLost = false;
+  const DRAFT_KEY = "gn-draft:" + new URL(form.action, location.href).pathname + (LIVE ? `?night=${LIVE.night_id}` : "");
   const FIELDS = ["game_id", "played_at", "location", "duration_min", "expansions", "notes"];
   let draftTimer = null;
   const store = {
@@ -54,6 +57,55 @@
       const fields = Object.fromEntries(FIELDS.map((f) => [f, form.elements[f].value]));
       store.set({ savedAt: Date.now(), fields, state });
     }, 300);
+    liveSync();
+  }
+
+  function liveSync() {
+    if (!LIVE || liveLost) return;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(pushLive, 700);
+  }
+  async function pushLive() {
+    const fields = Object.fromEntries(FIELDS.map((f) => [f, form.elements[f].value]));
+    try {
+      const r = await fetch(`/live/${LIVE.night_id}/current`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf, Accept: "application/json" },
+        body: JSON.stringify({ version: liveVersion, state, fields, summary: liveSummary() }),
+      });
+      if (r.status === 409) {
+        const j = await r.json().catch(() => ({}));
+        liveLost = true;
+        $("liveLostMsg").textContent = j.reason === "taken"
+          ? `${j.keeper} is keeping score now, so this phone stopped saving. `
+          : "This game was stopped or the night ended, so this phone stopped saving. ";
+        $("liveLost").hidden = false;
+        form.querySelector("button[type=submit]").disabled = true;
+        $("liveLost").scrollIntoView({ block: "center" });
+      }
+    } catch (_) { /* no signal: the device draft still has it; we try again on the next change */ }
+  }
+
+  // What people watching the night see: who's leading and everyone's total / rounds won so far.
+  function liveSummary() {
+    if (!game()) return {};
+    const { w, final, winners } = preview();
+    const sc = eff(), wins = byWins(), unit = roundWord().toLowerCase();
+    const played = state.rounds.filter((r) => r.won.length || Object.values(r.scores).some((v) => v !== null)).length;
+    const rows = state.players.map((s) => ({ pid: s.player_id, v: wins ? w[s.player_id] : (sc === "winloss" || sc === "coop" ? null : final[s.player_id]) }));
+    const desc = wins || sc === "high";
+    rows.sort((a, b) => (a.v === null) - (b.v === null) || (desc ? b.v - a.v : a.v - b.v));
+    const leaders = rows.filter((r) => winners.has(r.pid)).map((r) => players.get(r.pid).name);
+    const lead = !leaders.length ? "" : (roundsOn() && played ? `After ${played} ${unit}${played === 1 ? "" : "s"}: ` : "")
+      + (leaders.length > 1 ? `${leaders.join(" & ")} tied` : `${leaders[0]} ${state.winners_manual ? "wins" : "leads"}`);
+    return {
+      mode: roundsOn() ? (wins ? `who won each ${unit}` : `points by ${unit}`) : sc === "winloss" ? "pick the winner" : sc === "coop" ? "co-op" : "final scores",
+      lead,
+      rows: rows.map((r) => ({
+        name: players.get(r.pid).name, lead: winners.has(r.pid),
+        value: wins ? `${r.v} ${unit}${r.v === 1 ? "" : "s"}` : r.v === null || r.v === undefined ? (winners.has(r.pid) ? "🏆" : "—") : fmt(r.v),
+      })),
+    };
   }
   form.addEventListener("input", saveDraft);
   form.addEventListener("change", saveDraft);
@@ -710,7 +762,10 @@
     store.clear();
   });
 
-  const restored = restoreDraft();
+  if (LIVE && LIVE.fields) {  // whatever the previous scorekeeper filled in (where, notes…)
+    for (const f of FIELDS) if (f !== "game_id" && LIVE.fields[f]) form.elements[f].value = LIVE.fields[f];
+  }
+  const restored = LIVE ? false : restoreDraft();  // live: the server copy is the one that counts
   if (!restored && gameSel.value && init.use_rounds === undefined && !state.rounds.length) {
     const g = game();
     if (g) state.use_rounds = g.uses_rounds;

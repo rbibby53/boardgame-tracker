@@ -41,12 +41,17 @@ def list_nights(request: Request, page: int = 1, user: Player = Depends(current_
 def show_night(day: str, request: Request, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     d = _parse(day)
     start, end = N.bounds(d)
-    plays = [p for p in stats.load_plays(db, since=start) if p.played_at < end]
+    in_window = [p for p in stats.load_plays(db, since=start) if p.played_at < end]
+    plays = [p for p in in_window if not p.live_night_id]  # live nights have their own pages
+    live_nights = list({p.live_night_id: p.live_night for p in in_window if p.live_night_id}.values())
     if not plays:
-        raise HTTPException(404, "No plays logged that night")
+        if len(live_nights) == 1:
+            return RedirectResponse(f"/live/{live_nights[0].id}", status_code=303)
+        if not live_nights:
+            raise HTTPException(404, "No plays logged that night")
     night = N.Night(d, plays)
     all_nights = N.group(stats.load_plays(db))
-    days = [n.day for n in all_nights]
+    days = sorted({n.day for n in all_nights}, reverse=True)
     i = days.index(d)
     photos = [(p, ph) for p in plays for ph in p.photos]
     return render(request, "nights/show.html", {
@@ -55,6 +60,7 @@ def show_night(day: str, request: Request, user: Player = Depends(current_user),
         "newer": days[i - 1] if i > 0 else None,
         "older": days[i + 1] if i + 1 < len(days) else None,
         "photos": photos,
+        "live_nights": live_nights,
     })
 
 

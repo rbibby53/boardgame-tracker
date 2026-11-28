@@ -1,0 +1,113 @@
+{# The live part of a game night page: re-fetched every few seconds by live.js. #}
+{% from "_macros.html" import who, avatar, play_list %}
+{% set open = night.is_open %}
+{% if open %}
+  {# ---- now playing ---- #}
+  {% if cur %}
+  <section class="card live-now" aria-labelledby="nowH">
+    <div class="row"><h2 id="nowH" style="margin:0">Now playing: {{ cur.game.name }}</h2><span class="spacer"></span>
+      <span class="tag live-dot">live</span></div>
+    {% set s = cur.summary %}
+    <p class="muted small" style="margin:.25rem 0 .5rem">{{ cur.keeper.display_name if cur.keeper else "Someone" }} is keeping score{% if s.mode %} · {{ s.mode }}{% endif %}</p>
+    {% if s.rows %}
+    <div class="standings">
+      <div class="standings-head">{{ s.lead or "Scores so far" }}</div>
+      <ol class="standings-list">{% for r in s.rows %}<li class="{{ 'lead' if r.lead }}"><span>{{ r.name }}</span><strong>{{ r.value }}</strong></li>{% endfor %}</ol>
+    </div>
+    {% else %}<p class="muted" style="margin:0 0 .5rem">No scores yet.</p>{% endif %}
+    <div class="row">
+      {% if cur.keeper and cur.keeper.id == user.id %}<a class="btn primary" href="/plays/new?night={{ night.id }}">Back to scoring</a>
+      {% elif can_run %}<form class="inline" method="post" action="/live/{{ night.id }}/takeover"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn">Keep score instead</button></form>{% endif %}
+      {% if can_run %}<form class="inline" method="post" action="/live/{{ night.id }}/current/stop" onsubmit="return confirm('Stop {{ cur.game.name }} without saving it? The scores so far are lost.')"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn ghost sm">Stop without saving</button></form>{% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {# ---- up next ---- #}
+  {% if night.next_game and not cur %}
+  <section class="card live-next">
+    <div class="small muted">Up next</div>
+    <div class="row" style="margin-top:.2rem"><strong class="big">{{ night.next_game.name }}</strong><span class="spacer"></span>
+      {% if can_run %}<form class="inline" method="post" action="/live/{{ night.id }}/start"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="game_id" value="{{ night.next_game.id }}">
+        <button class="btn primary">▶ Start {{ night.next_game.name }}</button></form>{% endif %}</div>
+  </section>
+  {% elif night.next_game and cur %}
+  <p class="muted small" style="margin:-.25rem 0 1rem">Up next: <strong>{{ night.next_game.name }}</strong></p>
+  {% endif %}
+
+  {# ---- vote ---- #}
+  <section class="card" id="vote" aria-labelledby="voteH">
+    {% if vote %}
+    <h2 id="voteH">🗳️ {{ vote.title }}</h2>
+    <p class="hint" style="margin:-.25rem 0 .6rem">Tap every game you'd happily play. Most votes wins.</p>
+    <div class="vote-opts" data-poll="{{ vote.id }}">
+      {% for o in vote.options|sort(attribute="game.name") %}{% set n = o.votes|length %}{% set mine = o.id in my_votes %}
+      <button type="button" class="vote-opt{{ ' on' if mine }}" data-option="{{ o.id }}" aria-pressed="{{ 'true' if mine else 'false' }}" {{ 'disabled' if not can('vote') }}>
+        <span>{{ "✓ " if mine }}{{ o.game.name }}</span><strong>{{ n }}</strong></button>
+      {% endfor %}
+    </div>
+    {% if can('start_votes') %}<form method="post" action="/polls/{{ vote.id }}/close" style="margin-top:.6rem"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn">Close the vote: winner is up next</button></form>{% endif %}
+    {% elif can('start_votes') and me_here %}
+    <div class="row"><h2 id="voteH" style="margin:0">What's next?</h2><span class="spacer"></span>
+      <form class="inline" method="post" action="/live/{{ night.id }}/vote"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn">🗳️ Vote on it</button></form></div>
+    <p class="hint" style="margin:.4rem 0 0">Everyone here votes on the games in the pile that work for {{ n_here }}.</p>
+    {% else %}<h2 id="voteH" style="margin:0">What's next?</h2><p class="muted small" style="margin:.3rem 0 0">Join to vote.</p>{% endif %}
+  </section>
+
+  {# ---- who's here ---- #}
+  <section class="card" id="people" aria-labelledby="peopleH">
+    <h2 id="peopleH">Who's here <span class="muted small" style="font-weight:400">· {{ n_here }}</span></h2>
+    <div class="chips">
+      {% for m in night.here %}
+      <span class="chip on here-chip">{{ avatar(m.player) }}{{ m.player.display_name }}{% if m.player_id == night.host_id %} <span class="muted small">host</span>{% endif %}
+        {% if can_run and m.player_id != user.id %}<form class="inline" method="post" action="/live/{{ night.id }}/leave"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="player_id" value="{{ m.player_id }}">
+          <button class="chip-x" aria-label="{{ m.player.display_name }} left" title="Left">×</button></form>{% endif %}</span>
+      {% endfor %}
+    </div>
+    {% set gone = night.members|rejectattr("left_at", "none")|list %}
+    {% if gone %}<p class="muted small" style="margin:.5rem 0 0">Left earlier: {{ gone|map(attribute="player.display_name")|join(", ") }}</p>{% endif %}
+  </section>
+
+  {# ---- the pile ---- #}
+  <section class="card flush" id="pile" aria-labelledby="pileH">
+    <h2 id="pileH">Game pile <span class="muted small" style="font-weight:400">· what we brought</span></h2>
+    {% if pile %}
+    <div class="table-wrap"><table class="pile-table">
+      <tbody>{% for g in pile %}
+        <tr><td><a href="/games/{{ g.id }}"><strong>{{ g.name }}</strong></a>
+            <div class="small {{ 'muted' if fits[g.id] else 'warn' }}">{% if g.min_players or g.max_players %}{{ g.min_players or "?" }}{% if g.max_players != g.min_players %}–{{ g.max_players or "?" }}{% endif %} players{% if not fits[g.id] %} · not for {{ n_here }}{% endif %}{% else %}any number{% endif %}{% if g.play_time_min %} · ~{{ g.play_time_min }}m{% endif %}{% if played.get(g.id) %} · played tonight{% endif %}</div></td>
+          <td class="num nowrap">{% if can_run %}
+            {% if not cur %}<form class="inline" method="post" action="/live/{{ night.id }}/start"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="game_id" value="{{ g.id }}"><button class="btn sm primary" aria-label="Start {{ g.name }}">▶ Play</button></form>{% endif %}
+            {% if night.next_game_id != g.id %}<form class="inline" method="post" action="/live/{{ night.id }}/next"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="game_id" value="{{ g.id }}"><button class="btn sm" aria-label="{{ g.name }} up next">Next</button></form>{% endif %}
+            {% endif %}</td></tr>
+      {% endfor %}</tbody>
+    </table></div>
+    {% else %}<div class="empty">Nothing yet. Add the games you brought below.</div>{% endif %}
+  </section>
+{% else %}
+  <div class="card champion" style="margin-bottom:1rem"><div><strong>This game night has ended.</strong>
+    <div class="small muted">Ended {{ night.ended_at|utc("%A %-I:%M %p") }}{% if night.ended_reason == "idle" %} · closed itself after a quiet stretch{% elif night.ended_reason == "cutoff" %} · closed itself overnight{% endif %}</div></div></div>
+{% endif %}
+
+{# ---- tonight so far / the night's record ---- #}
+{% set n = summary %}
+{% if n.plays %}
+<div class="grid two">
+  <section class="card flush">
+    <h2>{{ "Tonight so far" if open else "Standings" }}</h2>
+    {% if n.champions %}<p style="padding:0 1rem;margin:0">👑 {{ n.champions|map(attribute="display_name")|join(" & ") }} {{ "leading" if open else ("champion" ~ ("s" if n.champions|length > 1 else "") ~ " of the night") }}{% set sw = n.swept_by() %}{% if sw and not open %} · <span class="tag win">Clean sweep</span>{% endif %}</p>{% endif %}
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>Player</th><th class="num">Wins</th><th class="num">Played</th></tr></thead>
+      <tbody>{% for r in n.rows %}<tr><td class="rank">{{ loop.index }}</td><td>{{ who(r.player) }}</td><td class="num">{{ r.wins }}</td><td class="num">{{ r.plays }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  </section>
+  <section class="card flush">
+    <h2>Games played</h2>
+    {{ play_list(n.plays|reverse|list) }}
+  </section>
+</div>
+{% elif not open %}<p class="muted">No games were logged at this night.</p>{% endif %}

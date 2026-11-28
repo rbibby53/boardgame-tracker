@@ -6,8 +6,14 @@
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 <div class="flash ok draft-bar" id="draftBar" hidden><span id="draftMsg"></span><button type="button" class="btn sm" id="draftDiscard">Discard draft</button></div>
 
+{% if live %}
+<div class="flash ok live-scoring"><span class="live-dot-sm" aria-hidden="true"></span> Keeping score live for <a href="/live/{{ live.night_id }}"><strong>{{ live.title }}</strong></a>: everyone there sees the scores as you go.</div>
+<div class="flash err" id="liveLost" hidden><span id="liveLostMsg"></span>
+  <form class="inline" method="post" action="/live/{{ live.night_id }}/takeover"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Keep score instead</button></form></div>
+{% endif %}
 <form method="post" action="{{ '/plays/' ~ play.id if play else '/plays' }}" id="playForm" class="stack" novalidate>
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if live %}<input type="hidden" name="live_night_id" value="{{ live.night_id }}">{% endif %}
   <input type="hidden" name="payload" id="payload">
 
   <section class="card">

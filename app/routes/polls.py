@@ -12,7 +12,7 @@ from .. import notify
 from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
 from ..db import get_db
-from ..models import Game, Play, Player, Poll, PollOption, PollVote, utcnow
+from ..models import Game, LiveNight, Play, Player, Poll, PollOption, PollVote, utcnow
 from ..templating import flash, render
 
 router = APIRouter(prefix="/polls")
@@ -154,12 +154,18 @@ async def vote(poll_id: int, request: Request, user: Player = Depends(require("v
 def close_poll(poll_id: int, request: Request, background: BackgroundTasks, user: Player = Depends(current_user),
                db: Session = Depends(get_db)):
     poll = _load(db, poll_id)
-    if not can_manage(request, user, poll):
+    at_night = poll.live_night_id and can(request, "start_votes")  # anyone running the night can close its vote
+    if not (can_manage(request, user, poll) or at_night):
         raise HTTPException(403, "Only whoever started the vote (or an admin) can close it.")
     if poll.is_open:
         rows = tally(db, poll)
         poll.closed_at = utcnow()
         poll.winner_game_id = rows[0]["game"].id if rows and rows[0]["votes"] > 0 else None
+        if poll.live_night_id and poll.winner_game_id:  # a game night's vote: the winner is up next
+            night = db.get(LiveNight, poll.live_night_id)
+            if night is not None and night.is_open:
+                night.next_game_id = poll.winner_game_id
+                night.last_activity_at = utcnow()
         db.commit()
         s = get_settings()
         if s.notify_enabled and poll.winner_game_id:
@@ -169,6 +175,8 @@ def close_poll(poll_id: int, request: Request, background: BackgroundTasks, user
                 "headline": f"🗳️ {name} wins the vote", "body": f"{poll.title}: {rows[0]['votes']} votes",
                 "url": f"{s.base_url}/polls/{poll.id}", "players": [], "winners": [], "coop_won": None,
             })
+    if poll.live_night_id:
+        return RedirectResponse(f"/live/{poll.live_night_id}", status_code=303)
     return RedirectResponse(f"/polls/{poll.id}", status_code=303)
 
 

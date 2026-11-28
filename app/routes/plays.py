@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from .. import live as L
 from .. import media, notify
 from ..auth import can, current_user, require, verify_csrf
 from ..config import get_settings
@@ -293,11 +294,29 @@ def list_plays(request: Request, game: int | None = None, player: int | None = N
 
 
 @router.get("/new")
-def new_play(request: Request, game: int | None = None, user: Player = Depends(require("log_plays")),
-             db: Session = Depends(get_db)):
+def new_play(request: Request, game: int | None = None, night: int | None = None,
+             user: Player = Depends(require("log_plays")), db: Session = Depends(get_db)):
     state = {"game_id": game, "players": [{"player_id": user.id}], "rounds": [],
              "winners_manual": False, "coop_won": None}
-    return render(request, "plays/form.html", {**_form_context(db, user, None, state),
+    live_ctx = None
+    if night is not None:
+        # keeping score for a live game night: the game in progress lives on the server, so everyone there sees it
+        n = L.get(db, night)
+        if n is None or not n.is_open:
+            flash(request, "That game night has ended.", "err")
+            return RedirectResponse("/", status_code=303)
+        if not n.current_game_id:
+            return RedirectResponse(f"/live/{n.id}", status_code=303)
+        if n.current_keeper_id != user.id:
+            keeper = n.current_keeper.display_name if n.current_keeper else "Someone"
+            flash(request, f"{keeper} is keeping score for {n.current_game.name}. Tap \"Keep score instead\" to take over.")
+            return RedirectResponse(f"/live/{n.id}", status_code=303)
+        cur = L.current(n)
+        state = {**cur["state"], "game_id": n.current_game_id}
+        live_ctx = {"night_id": n.id, "title": n.title, "version": n.current_version, "fields": cur["fields"]}
+    ctx = _form_context(db, user, None, state)
+    ctx["boot"]["live"] = live_ctx
+    return render(request, "plays/form.html", {**ctx, "live": live_ctx,
                                                "now": datetime.now(ZoneInfo(get_settings().timezone)).strftime("%Y-%m-%dT%H:%M")})
 
 
@@ -306,17 +325,39 @@ async def create_play(request: Request, background: BackgroundTasks, user: Playe
                       db: Session = Depends(get_db)):
     play = Play()
     saved, state, error = await _apply_form(request, db, play, user)
+    form = await request.form()
+    night = None
+    if not error and form.get("live_night_id"):
+        night = L.get(db, int(form.get("live_night_id")))
+        if night is None or not night.is_open:
+            night = None  # the night ended meanwhile: keep the play, just not attached to it
     if not error:
         db.add(play)
     if error:
         db.rollback()
-        form = await request.form()
-        return render(request, "plays/form.html", {**_form_context(db, user, None, state, error),
+        ctx = _form_context(db, user, None, state, error)
+        live_ctx = None
+        if form.get("live_night_id"):
+            n = L.get(db, int(form.get("live_night_id")))
+            if n is not None and n.is_open and n.current_keeper_id == user.id:
+                live_ctx = {"night_id": n.id, "title": n.title, "version": n.current_version, "fields": {}}
+        ctx["boot"]["live"] = live_ctx
+        return render(request, "plays/form.html", {**ctx, "live": live_ctx,
                                                    "now": form.get("played_at"), "form": form}, 422)
+    if night is not None:
+        play.live_night_id = night.id
+        for s in play.seats:
+            L.mark_here(night, s.player_id)
+        if night.current_game_id == play.game_id or night.current_keeper_id == user.id:
+            L.clear_current(night)
+        L.touch(night)
     db.commit()
     s = get_settings()
     if s.notify_enabled:
         background.add_task(notify.send_logged, s, notify.summarize(_get_play(db, play.id), s.base_url))
+    if night is not None:
+        flash(request, f"Saved {play.game.name}. What's next?")
+        return RedirectResponse(f"/live/{night.id}", status_code=303)
     flash(request, "Play saved.")
     return RedirectResponse(f"/plays/{play.id}", status_code=303)
 
