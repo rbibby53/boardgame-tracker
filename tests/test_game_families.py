@@ -29,14 +29,14 @@ def test_add_mini_game_via_form_follows_collection_shelf(client, db):
     pack = Game(name="Jackbox Party Pack 8", owned=False, is_box=True)
     db.add(pack)
     db.commit()
-    # "owned" is ticked, but the shelf is the collection's
+    # "owned" is ticked, but the shelf is the box's
     r = client.post("/games", data=game_form(csrf, name="Job Job", parent_id=str(pack.id), owned="on"),
                     follow_redirects=False)
     assert r.status_code == 303, r.text
     db.expire_all()
     jj = db.scalar(select(Game).where(Game.name == "Job Job"))
     assert jj.parent_id == pack.id and jj.owned is False
-    # the "+ Add mini-game" link preselects the collection
+    # the "+ Add mini-game" link preselects the box
     form = client.get(f"/games/new?parent={pack.id}").text
     assert re.search(rf'<option value="{pack.id}" selected>', form)
 
@@ -44,10 +44,10 @@ def test_add_mini_game_via_form_follows_collection_shelf(client, db):
 def test_nesting_rules(client, db):
     csrf = login(client)
     pack, q, _, solo = make_pack(db)
-    # a mini-game can't be a collection
+    # a mini-game can't have mini-games of its own
     r = client.post("/games", data=game_form(csrf, name="Deep", parent_id=str(q.id)))
     assert r.status_code == 422 and "is itself part of" in r.text
-    # a collection can't join another collection
+    # a box can't join another game
     r = client.post(f"/games/{pack.id}", data=game_form(csrf, name=pack.name, parent_id=str(solo.id), is_box="on"))
     assert r.status_code == 422 and "has its own mini-games" in r.text
     # a box can't be put in something else either, even without mini-games yet
@@ -56,10 +56,10 @@ def test_nesting_rules(client, db):
     # nor itself
     r = client.post(f"/games/{solo.id}", data=game_form(csrf, name="Catan", parent_id=str(solo.id)))
     assert r.status_code == 422 and "part of itself" in r.text
-    # a duplicate name with a collection picked is a form error, not a crash
+    # a duplicate name with a parent picked is a form error, not a crash
     r = client.post("/games", data=game_form(csrf, name="quiplash 3", parent_id=str(pack.id)))
     assert r.status_code == 422 and "already exists" in r.text
-    # a collection's edit form explains instead of offering the picker
+    # a box's edit form explains instead of offering the picker
     assert "has 2 mini-games" in client.get(f"/games/{pack.id}/edit").text
 
 
@@ -117,7 +117,7 @@ def test_picker_suggests_mini_games_not_collections(client, db):
     login(client)
     pack, q, b, solo = make_pack(db)
     html = client.get("/pick?players=7").text
-    assert "Quiplash 3" in html and "· Jackbox Party Pack 7" in html
+    assert "Quiplash 3" in html and ">Jackbox Party Pack 7</div>" in html
     assert "Blather" not in html and "Catan" not in html  # 2-6 and 3-4 players
     assert f'href="/games/{pack.id}"' not in html
 
@@ -190,7 +190,8 @@ def test_variants_keep_their_own_shelf_and_base_stays_playable(client, db):
     # editing the base doesn't touch its variants' shelf or archive status
     r = client.post(f"/games/{uno.id}", data=game_form(csrf, name="Uno"), follow_redirects=False)  # owned off
     assert r.status_code == 303
-    client.post(f"/games/{uno.id}/archive", data={"csrf": csrf})
+    r = client.post(f"/games/{uno.id}/archive", data={"csrf": csrf})
+    assert "Uno archived." in r.text and "mini-games" not in r.text  # variants aren't archived with it
     db.expire_all()
     assert not uno.owned and uno.archived and attack.owned and not flip.owned and not attack.archived
     client.post(f"/games/{uno.id}/archive", data={"csrf": csrf})
@@ -208,7 +209,7 @@ def test_variants_keep_their_own_shelf_and_base_stays_playable(client, db):
     group = group[:group.index("</optgroup>")]
     assert group.index(f'value="{uno.id}"') < group.index("Uno All Wild") < group.index("Uno Attack")
     pick = client.get("/pick?shelf=all").text
-    assert f'href="/games/{uno.id}"' in pick and "· variant of Uno" in pick
+    assert f'href="/games/{uno.id}"' in pick and "variant of Uno</div>" in pick
 
 
 def test_base_game_page_shows_variants_and_all_versions(client, db):

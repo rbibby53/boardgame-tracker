@@ -94,7 +94,7 @@ def _form_context(db: Session, user: Player, play: Play | None, state: dict, err
 
 
 def _filter_games(db: Session) -> list[tuple[Game, bool]]:
-    """Plays filter: every game, with each collection's mini-games right after it as (game, is_mini_game)."""
+    """Plays filter: every game, each box's mini-games / base game's variants right after it, as (game, nested)."""
     all_games = db.scalars(select(Game).options(selectinload(Game.children))).all()
     ids = {g.id for g in all_games}
     out: list[tuple[Game, bool]] = []
@@ -113,7 +113,7 @@ def _game_groups(games: list[Game]) -> list[tuple[Game | None, list[Game]]]:
     groups: dict[int, tuple[Game, list[Game]]] = {}
     out: list[tuple[Game | None, list[Game]]] = []
     for g in games:
-        if g.parent is not None and not g.parent.archived and (g.parent.is_box or g.parent_id in listed):
+        if g.parent is not None and not g.parent.archived and (g.in_box or g.parent_id in listed):
             head = g.parent
         elif not g.is_box and any(c.id in listed for c in g.children):
             head = g  # a base game heads its own group, with its variants

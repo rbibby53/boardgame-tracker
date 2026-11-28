@@ -18,6 +18,7 @@
     <form method="post" action="/admin/sync" style="margin-top:1rem">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="btn primary" {{ 'disabled' if not cfg.sync_enabled }}>Sync now</button>
+      {% if not cfg.sync_enabled %}<p class="small muted" style="margin:.4rem 0 0">Not configured. Set AUTHENTIK_URL and AUTHENTIK_TOKEN.</p>{% endif %}
     </form>
     <h3 style="margin-top:1.25rem">Notifications</h3>
     <p class="small muted">{{ "Sending to: " ~ cfg.notify|join(", ") if cfg.notify else "Not configured. Set NTFY_URL, DISCORD_WEBHOOK_URL or NOTIFY_WEBHOOK_URL." }}</p>

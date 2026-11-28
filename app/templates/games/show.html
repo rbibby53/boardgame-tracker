@@ -7,7 +7,7 @@
     {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
     <div>
     <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}</h1>
-    {% if game.parent %}<p class="small" style="margin:0 0 .2rem">{{ "Part of" if game.parent.is_box else "Variant of" }} <a href="/games/{{ game.parent.id }}">{{ game.parent.name }}</a></p>{% endif %}
+    {% if game.parent %}<p class="small" style="margin:0 0 .2rem">{{ "Part of" if game.in_box else "Variant of" }} <a href="/games/{{ game.parent.id }}">{{ game.parent.name }}</a></p>{% endif %}
     {% if box_view %}
     <p class="muted">Box of games · {{ kids|length }} mini-games{% if span[0] %} · {{ span[0] }}{% if span[1] and span[1] != span[0] %}–{{ span[1] }}{% endif %} players{% endif %}
       {% if game.year %} · {{ game.year }}{% endif %}{% if game.owned %} · on our shelf{% endif %}</p>
@@ -45,13 +45,15 @@
 <section class="card flush" style="margin-bottom:1rem">
   <h2>{{ "Mini-games" if box_view else "Variants" }}{% if not box_view and can('manage_games') %} <a class="small" style="font-weight:400" href="/games/new?parent={{ game.id }}">+ Add variant</a>{% endif %}</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Game</th><th>Scoring</th><th class="num">Players</th><th class="num">Plays</th><th></th></tr></thead>
+    <thead><tr><th>Game</th><th class="hide-sm">Scoring</th><th class="num">Players</th><th class="num">Plays</th><th><span class="sr-only">Log a play</span></th></tr></thead>
     <tbody>{% for c in kids %}
-      <tr><td><a href="/games/{{ c.id }}"><strong>{{ c.name }}</strong></a>{% if c.archived %} <span class="tag">archived</span>{% endif %}{% if not box_view and c.owned %} <span class="tag" title="On our shelf">owned</span>{% endif %}</td>
-        <td class="small muted">{{ c.scoring_label }}{% if c.uses_rounds %} · {{ (c.round_label or "round")|lower }}s{% endif %}</td>
+        {% set how %}{{ c.scoring_label }}{% if c.uses_rounds %} · {{ (c.round_label or "round")|lower }}s{% endif %}{% endset %}
+      <tr><td><a href="/games/{{ c.id }}"><strong>{{ c.name }}</strong></a>{% if c.archived %} <span class="tag">archived</span>{% endif %}{% if not box_view and c.owned %} <span class="tag" title="On our shelf">owned</span>{% endif %}
+          <div class="show-sm small muted">{{ how }}</div></td>
+        <td class="small muted hide-sm">{{ how }}</td>
         <td class="num small">{% if c.min_players %}{{ c.min_players }}{% if c.max_players and c.max_players != c.min_players %}–{{ c.max_players }}{% endif %}{% else %}—{% endif %}</td>
         <td class="num">{{ kid_plays.get(c.id, 0) }}</td>
-        <td class="num">{% if can('log_plays') and not c.archived %}<a class="btn sm" href="/plays/new?game={{ c.id }}">Log</a>{% endif %}</td></tr>
+        <td class="num">{% if can('log_plays') and not c.archived %}<a class="btn sm" href="/plays/new?game={{ c.id }}" aria-label="Log a play of {{ c.name }}">Log</a>{% endif %}</td></tr>
     {% endfor %}</tbody>
   </table></div>
 </section>

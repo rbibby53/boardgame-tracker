@@ -117,8 +117,14 @@ class Game(Base):
         return SCORING_TYPES.get(self.scoring, self.scoring)
 
     @property
-    def is_variant(self) -> bool:
-        return self.parent is not None and not self.parent.is_box
+    def in_box(self) -> bool:
+        """A mini-game in a box of games (as opposed to a variant of a playable base game)."""
+        return self.parent is not None and self.parent.is_box
+
+    @property
+    def family_word(self) -> str:
+        """What this game's children are called."""
+        return "mini-games" if self.is_box else "variants"
 
     def cascade_to_children(self, *, archived: bool = False) -> None:
         """A box's mini-games follow it onto/off the shelf, and (when the box itself is archived or restored)

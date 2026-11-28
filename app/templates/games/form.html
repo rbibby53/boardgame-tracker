@@ -24,8 +24,8 @@
       <input type="text" id="name" name="name" required maxlength="200" value="{{ val('name', game.name if game else '') }}" autofocus></div>
     <div class="wide">
       {% if game and game.children %}
-      <label>{{ "Mini-games" if game.is_box else "Variants" }}</label>
-      <p class="hint" style="margin:0">{{ game.name }} has {{ game.children|length }} {{ "mini-games" if game.is_box else "variants" }}, so it can't be part of another game.
+      <label>{{ game.family_word|capitalize }}</label>
+      <p class="hint" style="margin:0">{{ game.name }} has {{ game.children|length }} {{ game.family_word }}, so it can't be part of another game.
         {% if game.is_box %}Its shelf status applies to all of them.{% endif %}
         <a href="/games/new?parent={{ game.id }}">+ Add {{ "a mini-game" if game.is_box else "a variant" }}</a></p>
       {% else %}
@@ -50,7 +50,7 @@
       <label class="check"><input type="checkbox" name="uses_rounds" {{ 'checked' if ur }}> Score by round by default</label>
       {% set ow = ('owned' in f) if form else (game.owned if game else true) %}
       <label class="check" style="margin-top:.4rem"><input type="checkbox" name="owned" {{ 'checked' if ow }}> On our shelf</label>
-      {% if game and game.parent and game.parent.is_box %}<div class="hint">Follows {{ game.parent.name }}.</div>{% endif %}</div>
+      {% if game and game.in_box %}<div class="hint">Follows {{ game.parent.name }}.</div>{% endif %}</div>
     <div><label for="round_label">What's a round called? <span class="hint">Round, Hand, Era, Age…</span></label>
       <input type="text" id="round_label" name="round_label" maxlength="40" placeholder="Round" value="{{ val('round_label', game.round_label if game and game.round_label else '') }}"></div>
     <div><label for="min_players">Min players</label>

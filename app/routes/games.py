@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 import asyncio
+from collections import Counter
 
 from .. import bgg, media, ratings, stats
 from ..auth import current_user, require, verify_csrf
@@ -138,8 +139,7 @@ def _read_parent(db: Session, game: Game, raw) -> str | None:
     if parent.parent_id is not None:
         return f"{parent.name} is itself part of {parent.parent.name}. Pick {parent.parent.name} instead."
     if game.id is not None and game.children:
-        kind = "mini-games" if game.is_box else "variants"
-        return f"{game.name} has its own {kind}, so it can't be part of another game."
+        return f"{game.name} has its own {game.family_word}, so it can't be part of another game."
     if game.is_box:
         return "A box of games can't be part of another game."
     # parent_id, not the relationship: assigning game.parent would cascade a new game into the session
@@ -171,7 +171,8 @@ def list_games(request: Request, archived: bool = False, shelf: bool = False, us
     if shelf:
         q = q.where(Game.owned.is_(True))
     rows = db.execute(q).all()
-    # Mini-games are listed under their collection; one whose collection isn't in this view stands alone.
+    # Mini-games and variants are listed under their box / base game; one whose parent isn't in this view
+    # (archived, or off the shelf) stands alone with a "part of" / "variant of" note.
     shown = {g.id for g, _, _ in rows}
     kids: dict[int, list] = {}
     for g, n, last in rows:
@@ -266,11 +267,8 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
     })
 
 
-def _count_by_game(plays: list[Play]) -> dict[int, int]:
-    out: dict[int, int] = {}
-    for p in plays:
-        out[p.game_id] = out.get(p.game_id, 0) + 1
-    return out
+def _count_by_game(plays: list[Play]) -> Counter:
+    return Counter(p.game_id for p in plays)
 
 
 @router.get("/{game_id}/edit")
@@ -312,7 +310,7 @@ def archive_game(game_id: int, request: Request, user: Player = Depends(require(
     game.archived = not game.archived
     game.cascade_to_children(archived=True)
     db.commit()
-    extra = f" with its {len(game.children)} mini-games" if game.children else ""
+    extra = f" with its {len(game.children)} mini-games" if game.is_box and game.children else ""
     flash(request, f"{game.name} {'archived' if game.archived else 'restored'}{extra}.")
     return RedirectResponse(f"/games/{game.id}", status_code=303)
 
@@ -327,10 +325,11 @@ def delete_game(game_id: int, request: Request, user: Player = Depends(require("
         flash(request, "This game has plays logged. Archive it instead, or delete its plays first.", "err")
         return RedirectResponse(f"/games/{game.id}", status_code=303)
     freed = len(game.children)
-    for c in list(game.children):  # mini-games survive as standalone games
+    kind = game.family_word
+    for c in list(game.children):  # mini-games / variants survive as standalone games
         c.parent_id = None
     db.delete(game)
     db.commit()
     media.delete_cover(game_id)
-    flash(request, "Game deleted." + (f" Its {freed} mini-games are standalone games now." if freed else ""))
+    flash(request, "Game deleted." + (f" Its {freed} {kind} are standalone games now." if freed else ""))
     return RedirectResponse("/games", status_code=303)

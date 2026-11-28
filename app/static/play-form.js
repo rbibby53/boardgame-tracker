@@ -89,6 +89,7 @@
   function avatar(p) {
     const el = document.createElement("span");
     el.className = "avatar";
+    el.setAttribute("aria-hidden", "true"); // decorative: the name is next to it
     el.style.setProperty("--c", p.color);
     el.textContent = p.initials;
     if (p.avatar) {

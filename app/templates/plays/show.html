@@ -43,7 +43,7 @@
     <dl class="kv">
       {% if play.location %}<dt>Where</dt><dd>{{ play.location }}</dd>{% endif %}
       {% if play.duration_min %}<dt>Length</dt><dd>{{ play.duration_min // 60 ~ "h " if play.duration_min >= 60 }}{{ play.duration_min % 60 }}m</dd>{% endif %}
-      {% if play.expansions %}<dt>Expansions</dt><dd>{{ play.expansions }}</dd>{% endif %}
+      {% if play.expansions %}<dt>Expansions / rules</dt><dd>{{ play.expansions }}</dd>{% endif %}
       <dt>Scoring</dt><dd>{{ play.game.scoring_label }}</dd>
       <dt>Logged by</dt><dd>{{ play.created_by.display_name if play.created_by else "—" }} <span class="muted small">· {{ play.created_at|utc }}</span></dd>
     </dl>

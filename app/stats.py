@@ -28,7 +28,7 @@ def load_plays(db: Session, *, game_id: int | None = None, game_ids: list[int] |
     )
     if game_id is not None:
         q = q.where(Play.game_id == game_id)
-    if game_ids is not None:  # a collection: its own plays plus its mini-games'
+    if game_ids is not None:  # a box or base game: its own plays plus its mini-games' / variants'
         q = q.where(Play.game_id.in_(game_ids or [-1]))
     if player_id is not None:
         q = q.where(Play.seats.any(PlaySeat.player_id == player_id))

@@ -33,7 +33,7 @@
         <input type="number" name="duration_min" id="duration_min" min="1" inputmode="numeric" value="{{ form.duration_min if form else (play.duration_min if play and play.duration_min else '') }}">
       </div>
       <div class="wide">
-        <label for="expansions">Expansions / variant <span class="hint">optional</span></label>
+        <label for="expansions">Expansions / house rules <span class="hint">optional</span></label>
         <input type="text" name="expansions" id="expansions" maxlength="500" value="{{ form.expansions if form else (play.expansions if play and play.expansions else '') }}">
       </div>
     </div>
