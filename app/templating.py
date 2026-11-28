@@ -74,6 +74,24 @@ def _role_of_factory(request: Request):
     return role_of
 
 
+def _live_bar_factory(request: Request):
+    """Lazy: the open game night the signed-in person is at, for the bar under the header."""
+    def live_bar() -> dict | None:
+        user = getattr(request.state, "user", None)
+        if user is None or request.url.path.startswith("/live/"):
+            return None
+        from . import live
+        from .db import SessionLocal
+
+        with SessionLocal() as db:
+            n = live.night_of_player(db, user)
+            if n is None:
+                return None
+            return {"id": n.id, "title": n.title, "now": n.current_game.name if n.current_game else None,
+                    "keeper": n.current_keeper_id == user.id}
+    return live_bar
+
+
 def render(request: Request, name: str, ctx: dict | None = None, status_code: int = 200):
     settings = get_settings()
     perms = getattr(request.state, "perms", set())
@@ -82,6 +100,7 @@ def render(request: Request, name: str, ctx: dict | None = None, status_code: in
         "role": getattr(request.state, "role", None),
         "can": lambda perm: perm in perms,
         "role_of": _role_of_factory(request),
+        "live_bar": _live_bar_factory(request),
         "csrf": csrf_token(request),
         "settings": settings,
         "flash": request.session.pop("flash", None),

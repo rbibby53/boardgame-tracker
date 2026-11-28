@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Start a game night · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Start a game night</h1>
+  <p class="muted">It shows at the top of everyone's dashboard. People tap Join when they arrive, and can leave any time.</p></div></div>
+{% if open_nights %}
+<div class="card" style="margin-bottom:1rem">
+  <strong>Already going:</strong>
+  <ul class="plain-list">{% for n in open_nights %}<li><a href="/live/{{ n.id }}">{{ n.title }}</a> <span class="muted small">· {{ n.here|length }} here</span></li>{% endfor %}</ul>
+  <p class="hint" style="margin:0">Joining one of those? Open it and tap Join. You can still start your own: several nights can run at once.</p>
+</div>
+{% endif %}
+<form method="post" action="/live" class="card">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="fields">
+    <div class="wide"><label for="title">Name</label><input type="text" id="title" name="title" value="{{ default_title }}" maxlength="150" required></div>
+    <div class="wide"><label for="location">Where <span class="hint">optional</span></label><input type="text" id="location" name="location" maxlength="200" placeholder="Home, the lake house…"></div>
+  </div>
+  {% if already %}<p class="hint">You'll leave {{ already.title }} when this one starts.</p>{% endif %}
+  <div class="form-actions"><a class="btn ghost" href="/">Cancel</a><button class="btn primary">Start the night</button></div>
+</form>
+{% endblock %}

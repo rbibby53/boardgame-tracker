@@ -20,6 +20,7 @@ def load_plays(db: Session, *, game_id: int | None = None, game_ids: list[int] |
         select(Play)
         .options(
             selectinload(Play.game),
+            selectinload(Play.live_night),
             selectinload(Play.seats).selectinload(PlaySeat.player),
             selectinload(Play.category_scores),
             selectinload(Play.photos),

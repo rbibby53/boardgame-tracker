@@ -5,9 +5,9 @@
 <div class="card flush">
 {% if nights %}
 <ul class="plays">
-{% for n in nights %}{% set m = meta.get(n.day) %}
-  <li><a class="item" href="/nights/{{ n.day.isoformat() }}">
-    <span class="g">{{ m.title if m and m.title else n.day.strftime("%A night") }}</span>
+{% for n in nights %}{% set m = none if n.live else meta.get(n.day) %}
+  <li><a class="item" href="{{ n.url }}">
+    <span class="g">{{ n.live.title if n.live else (m.title if m and m.title else n.day.strftime("%A night")) }}{% if n.live %} <span class="tag{{ ' live-dot' if n.live.is_open }}">{{ "live" if n.live.is_open else "game night" }}</span>{% endif %}</span>
     <span class="d nowrap">{{ n.day.strftime("%b %-d, %Y") }}</span>
     <span class="ppl">
       <span>{{ n.plays|length }} game{{ 's' if n.plays|length != 1 }}: {{ n.plays|map(attribute="game.name")|unique|join(", ") }}</span>

@@ -5,7 +5,7 @@
 <div class="page-head">
   <div>
     <h1><a href="/games/{{ play.game.id }}" style="color:inherit">{{ play.game.name }}</a></h1>
-    <p class="muted">{{ play.played_at|dt("%A, %B %-d, %Y · %-I:%M %p") }} · <a href="{{ play.played_at|night }}">game night</a></p>
+    <p class="muted">{{ play.played_at|dt("%A, %B %-d, %Y · %-I:%M %p") }} · {% if play.live_night %}<a href="/live/{{ play.live_night.id }}">{{ play.live_night.title }}</a>{% else %}<a href="{{ play.played_at|night }}">game night</a>{% endif %}</p>
   </div>
   {% if can_edit %}
   <div class="row">

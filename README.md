@@ -387,6 +387,21 @@ A game can be **Part of** another game, one level deep. There are two kinds:
 Deleting a box or base game keeps its mini-games or variants as standalone games.
 </details>
 
+<details open>
+<summary><b>Live game nights</b></summary>
+
+Tap **Start a game night** on the dashboard. The night shows at the top of everyone's dashboard, and people tap **Join** when they arrive (they can leave and come back any time). Several nights can run at once, say one at your place and one at your parents'; each person is at one night at a time.
+
+- **Who's here:** join yourself, or mark someone as here who isn't using the app (or a walk-in guest by name).
+- **Game pile:** add the games you brought. Each shows whether it works for the number of people here.
+- **What's next:** start a vote on the pile games that fit everyone here. Everyone votes from their own phone, and closing the vote makes the winner **Up next**.
+- **Play:** **Start** opens the score form with the game and everyone who's here filled in. Every tap is saved live, so everyone at the night sees the standings on their phone; anyone there can tap **Keep score instead** to take over (the first phone stops saving and says so). **Save** brings everyone back to the night with tonight's standings.
+- **Ending:** anyone at the night (or the host, or an admin) taps **End night**. A night nobody ends closes itself after 3 quiet hours or at the night cutoff (5 AM).
+- **History:** each live night is its own entry under Nights, with its own champion, so two nights on the same evening never mix.
+
+The night page refreshes itself every few seconds (no websockets needed, so it works behind any proxy).
+</details>
+
 <details>
 <summary><b>Keeping score by round (Mexican Train, Uno, Hearts…)</b></summary>
 
