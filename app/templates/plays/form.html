@@ -6,19 +6,31 @@
 {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
 <div class="flash ok draft-bar" id="draftBar" hidden><span id="draftMsg"></span><button type="button" class="btn sm" id="draftDiscard">Discard draft</button></div>
 
+{% if live %}
+<div class="flash ok live-scoring"><span class="live-dot-sm" aria-hidden="true"></span> Keeping score live for <a href="/live/{{ live.night_id }}"><strong>{{ live.title }}</strong></a>: everyone there sees the scores as you go.</div>
+<div class="flash err" id="liveLost" hidden><span id="liveLostMsg"></span>
+  <form class="inline" method="post" action="/live/{{ live.night_id }}/takeover"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn sm">Keep score instead</button></form></div>
+{% endif %}
 <form method="post" action="{{ '/plays/' ~ play.id if play else '/plays' }}" id="playForm" class="stack" novalidate>
   <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if live %}<input type="hidden" name="live_night_id" value="{{ live.night_id }}">{% endif %}
   <input type="hidden" name="payload" id="payload">
 
   <section class="card">
     <div class="fields">
       <div>
         <label for="game_id">Game {% if can('manage_games') %}<a class="hint" href="/games/new?next=log">+ new game</a>{% endif %}</label>
+        <input type="search" id="gameFilter" placeholder="Type to find a game…" aria-label="Find a game" autocomplete="off" style="margin-bottom:.4rem">
         <select name="game_id" id="game_id" required>
           <option value="">Choose a game…</option>
-          {% for col, gs in game_groups %}{% if col %}<optgroup label="{{ col.name }}">{% for g in gs %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>{% else %}<option value="{{ gs[0].id }}">{{ gs[0].name }}</option>{% endif %}{% endfor %}
+          {% for col, gs in game_groups %}{% if col %}<optgroup label="{{ col }}">{% for g in gs %}<option value="{{ g.id }}">{{ g.name }}</option>{% endfor %}</optgroup>{% else %}<option value="{{ gs[0].id }}">{{ gs[0].name }}</option>{% endif %}{% endfor %}
         </select>
         <div class="hint" id="scoringHint"></div>
+      </div>
+      <div class="wide" id="expWrap" hidden>
+        <span class="label-like" id="expLabel">Playing with <span class="hint">tap the expansions you're using</span></span>
+        <div class="chips" id="expChips" role="group" aria-labelledby="expLabel"></div>
+        <button type="button" class="btn sm ghost" id="expMore" hidden style="margin-top:.4rem"></button>
       </div>
       <div>
         <label for="played_at">When</label>
@@ -33,7 +45,7 @@
         <input type="number" name="duration_min" id="duration_min" min="1" inputmode="numeric" value="{{ form.duration_min if form else (play.duration_min if play and play.duration_min else '') }}">
       </div>
       <div class="wide">
-        <label for="expansions">Expansions / house rules <span class="hint">optional</span></label>
+        <label for="expansions"><span id="expTextLabel">Expansions / house rules</span> <span class="hint">optional</span></label>
         <input type="text" name="expansions" id="expansions" maxlength="500" value="{{ form.expansions if form else (play.expansions if play and play.expansions else '') }}">
       </div>
     </div>
@@ -42,7 +54,11 @@
   <section class="card">
     <div class="row" style="margin-bottom:.6rem"><h2 style="margin:0">Who played</h2><span class="spacer"></span>
       <button type="button" class="btn sm" id="sameAsLast" hidden>Same players as last time</button></div>
+    <div id="chipSearchWrap" hidden style="margin-bottom:.6rem">
+      <input type="search" id="chipSearch" placeholder="Find a player…" aria-label="Find a player" autocomplete="off">
+    </div>
     <div class="chips" id="playerChips"></div>
+    <button type="button" class="btn sm ghost" id="chipMore" hidden style="margin-top:.5rem"></button>
     <div class="row" style="margin-top:.6rem" {{ '' if can('manage_guests') else 'hidden' }}>
       <input type="text" id="guestName" placeholder="Add a guest player…" style="max-width:260px" maxlength="150">
       <button type="button" class="btn sm" id="addGuest">Add</button>
@@ -53,8 +69,17 @@
     <div class="row" style="margin-bottom:.75rem">
       <h2 style="margin:0">Scores</h2><span class="spacer"></span>
       <label class="check" id="sheetToggleWrap" hidden><input type="checkbox" id="useSheet"> <span>Score sheet</span></label>
-      <label class="check" id="roundsToggleWrap"><input type="checkbox" id="useRounds"> <span>Track <span id="roundWord">round</span>s</span></label>
+      <label class="check" id="roundsToggleWrap"><input type="checkbox" id="useRounds"> <span>Keep score by <span id="roundWord">round</span></span></label>
     </div>
+
+    <fieldset class="mode-pick" id="modeBox" hidden>
+      <legend>How are you keeping score?</legend>
+      <label><input type="radio" name="mode" value="wins"> <span><strong>Who won each round</strong><small>No points, most wins takes it</small></span></label>
+      <label><input type="radio" name="mode" value="points"> <span><strong>Points</strong><small>Add up everyone's score</small></span></label>
+    </fieldset>
+    <p class="hint" id="modeHint" style="margin:.25rem 0 .75rem"></p>
+
+    <div class="standings" id="standings" hidden aria-live="polite"></div>
 
     <div id="sheetWrap" hidden>
       <div class="score-grid"><table id="sheetTable"></table></div>
@@ -62,25 +87,31 @@
     </div>
 
     <div id="roundsWrap" hidden>
-      <div class="score-grid"><table id="roundsTable"></table></div>
-      <div class="row" style="margin:.6rem 0 1rem"><button type="button" class="btn sm" id="addRound">+ Add <span class="rw">round</span></button>
-        <span class="hint">Totals fill in automatically. Tick "won" for whoever took the <span class="rw">round</span>.</span></div>
+      <div class="score-grid" id="roundsGrid"><table id="roundsTable"></table></div>
+      <div id="roundsList" class="rounds-list" hidden></div>
+      <button type="button" class="btn next-round" id="addRound">+ Next round</button>
     </div>
 
     <div id="coopBox" class="coop-box" hidden>
       <label class="check"><input type="checkbox" id="coopWon"> <span>We beat the game 🎉</span></label>
     </div>
 
-    <div id="seatsBox">
-      <div class="row" style="margin-bottom:.25rem">
-        <span class="hint" id="seatHint"></span><span class="spacer"></span>
-        <div class="seg" id="winnerMode">
-          <label><input type="radio" name="wm" value="auto"> Auto winner</label>
-          <label><input type="radio" name="wm" value="manual"> Pick winner</label>
-        </div>
-      </div>
+    <div id="seatsBox"><div id="seatsInner">
+      <div class="hint" id="seatHint" style="margin-bottom:.25rem"></div>
       <div id="seats"></div>
-    </div>
+    </div></div>
+
+    <details class="more" id="moreBox" hidden>
+      <summary id="moreSummary">More options</summary>
+      <div class="row" style="margin:.5rem 0">
+        <div class="seg" id="winnerMode">
+          <label><input type="radio" name="wm" value="auto"> Winner from the scores</label>
+          <label><input type="radio" name="wm" value="manual"> I'll pick the winner</label>
+        </div>
+        <label class="check"><input type="checkbox" id="useTeams"> <span>Playing in teams</span></label>
+      </div>
+      <div id="moreSeats"></div>
+    </details>
   </section>
 
   <section class="card">

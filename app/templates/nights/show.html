@@ -13,6 +13,10 @@
   </div>
 </div>
 
+{% if live_nights %}
+<div class="card" style="margin-bottom:1rem"><span class="muted small">Also that evening:</span>
+  {% for ln in live_nights %}<a href="/live/{{ ln.id }}"><strong>{{ ln.title }}</strong></a>{{ ", " if not loop.last }}{% endfor %}</div>
+{% endif %}
 {% if night.champions %}
 <div class="card champion" style="margin-bottom:1rem">
   <div class="row">{% for c in night.champions %}{{ who(c, size="lg") }}{% endfor %}</div>

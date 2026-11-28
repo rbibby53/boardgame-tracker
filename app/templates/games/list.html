@@ -4,11 +4,16 @@
 <div class="page-head">
   <div><h1>{{ "Archived games" if archived else "Games" }}</h1></div>
   <div class="row">
-    {% if any_owned and not archived %}<a class="btn sm ghost" href="/games{{ '' if shelf else '?shelf=true' }}">{{ "All games" if shelf else "On our shelf" }}</a>{% endif %}
+    {% if not archived %}<a class="btn sm ghost" href="/games{{ '' if fav else '?fav=true' }}" aria-pressed="{{ 'true' if fav else 'false' }}">{{ "All games" if fav else "★ My favorites" }}</a>{% endif %}
+    {% if any_owned and not archived and not fav %}<a class="btn sm ghost" href="/games{{ '' if shelf else '?shelf=true' }}">{{ "All games" if shelf else "On our shelf" }}</a>{% endif %}
     <a class="btn sm ghost" href="/games{{ '' if archived else '?archived=true' }}">{{ "Active games" if archived else "Archived" }}</a>
     {% if can('manage_games') %}<a class="btn primary" href="/games/new">+ Add game</a>{% endif %}
   </div>
 </div>
+{% if entries %}
+<div class="search-row"><input type="search" id="gameSearch" placeholder="Search games…" aria-label="Search games" autocomplete="off">
+  <span class="hint" id="gameSearchCount" aria-live="polite"></span></div>
+{% endif %}
 <div class="card flush">
   {% if entries %}
   <div class="table-wrap"><table>
@@ -21,7 +26,7 @@
         {%- if count %} <span class="tag nowrap" title="Variants">{{ count }} variant{{ "s" if count > 1 }}</span>{% endif %}{% endif %}
     {%- endmacro %}
     {% macro game_row(g, n, last, sub=false, count=0) %}
-      <tr{% if sub %} class="sub"{% endif %}>
+      <tr class="game-row{{ ' sub' if sub }}" data-name="{{ g.name|lower }}" {% if sub %}data-parent="{{ g.parent_id }}"{% else %}data-head="{{ g.id }}"{% endif %}>
         <td><a class="who" href="/games/{{ g.id }}">{% if sub %}<span class="muted" aria-hidden="true">↳</span>{% endif %}{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
           {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}
           {% if not sub and g.parent %}<span class="muted small"> · {{ "part" if g.in_box else "variant" }} of <a href="/games/{{ g.parent.id }}">{{ g.parent.name }}</a></span>{% endif %}
@@ -29,7 +34,9 @@
         <td class="small muted hide-sm">{{ game_meta(g, count, sub) }}</td>
         <td class="num">{{ n }}</td>
         <td class="num small muted nowrap hide-sm">{{ last|dt("%b %-d, %Y") if last else "—" }}</td>
-        <td class="num">{% if can('log_plays') and not (g.is_box and count) %}<a class="btn sm" href="/plays/new?game={{ g.id }}" aria-label="Log a play of {{ g.name }}">Log</a>{% endif %}</td>
+        <td class="num nowrap"><form class="inline" method="post" action="/games/{{ g.id }}/favorite"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ here }}#g{{ g.id }}">
+            <button class="fav-btn" id="g{{ g.id }}" aria-pressed="{{ 'true' if g.id in favs else 'false' }}" aria-label="{{ 'Remove ' ~ g.name ~ ' from' if g.id in favs else 'Add ' ~ g.name ~ ' to' }} your favorites" title="{{ 'Favorite' if g.id in favs else 'Add to your favorites' }}">{{ "★" if g.id in favs else "☆" }}</button></form>
+          {% if can('log_plays') and not (g.is_box and count) %}<a class="btn sm" href="/plays/new?game={{ g.id }}" aria-label="Log a play of {{ g.name }}">Log</a>{% endif %}</td>
       </tr>
     {% endmacro %}
     {% for e in entries %}
@@ -39,7 +46,7 @@
     </tbody>
   </table></div>
   {% else %}
-  <div class="empty">{{ "No archived games." if archived else "No games yet. Add the first one." }}</div>
+  <div class="empty">{{ "No archived games." if archived else ("No favorites yet. Tap ☆ next to a game to add it." if fav else "No games yet. Add the first one.") }}</div>
   {% endif %}
 </div>
 {% endblock %}

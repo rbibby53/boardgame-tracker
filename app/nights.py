@@ -1,4 +1,6 @@
-"""Game nights: plays grouped by evening. A play before NIGHT_CUTOFF_HOUR counts toward the previous day."""
+"""Game nights: plays grouped by evening. A play before NIGHT_CUTOFF_HOUR counts toward the previous day.
+Plays logged during a live game night (app/live.py) belong to that night instead, so two nights on the same
+evening (one at Ryan's, one at his parents') stay separate, each with its own champion."""
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -27,6 +29,11 @@ class NightRow:
 class Night:
     day: date
     plays: list[Play] = field(default_factory=list)
+    live: object | None = None  # the LiveNight these plays were logged at, if any
+
+    @property
+    def url(self) -> str:
+        return f"/live/{self.live.id}" if self.live else f"/nights/{self.day.isoformat()}"
 
     @property
     def rows(self) -> list[NightRow]:
@@ -66,9 +73,15 @@ class Night:
 
 
 def group(plays: list[Play]) -> list[Night]:
-    """Newest night first; plays within a night in play order."""
-    nights: dict[date, Night] = {}
+    """Newest night first; plays within a night in play order. A live night's plays form their own night."""
+    nights: dict[tuple, Night] = {}
     for p in sorted(plays, key=lambda p: (p.played_at, p.id)):
-        d = night_of(p.played_at)
-        nights.setdefault(d, Night(d)).plays.append(p)
-    return sorted(nights.values(), key=lambda n: n.day, reverse=True)
+        if p.live_night_id:
+            key = ("live", p.live_night_id)
+            if key not in nights:
+                nights[key] = Night(night_of(p.played_at), live=p.live_night)
+        else:
+            key = ("day", night_of(p.played_at))
+            nights.setdefault(key, Night(key[1]))
+        nights[key].plays.append(p)
+    return sorted(nights.values(), key=lambda n: (n.day, n.plays[0].played_at), reverse=True)

@@ -92,6 +92,27 @@ window.GN = (() => {
   window.addEventListener("online", netBadge);
   window.addEventListener("offline", netBadge);
   document.addEventListener("DOMContentLoaded", netBadge);
+  // Games list search: filters rows as you type; a box / base game stays visible when one of its games matches.
+  document.addEventListener("DOMContentLoaded", () => {
+    const input = document.getElementById("gameSearch");
+    if (!input) return;
+    const rows = [...document.querySelectorAll("tr.game-row")];
+    const count = document.getElementById("gameSearchCount");
+    input.addEventListener("input", () => {
+      const q = input.value.trim().toLowerCase();
+      const hit = (r) => !q || r.dataset.name.includes(q);
+      const headsShown = new Set(rows.filter((r) => r.dataset.parent && hit(r)).map((r) => r.dataset.parent));
+      const headsHit = new Set(rows.filter((r) => r.dataset.head && hit(r)).map((r) => r.dataset.head));
+      let n = 0;
+      for (const r of rows) {
+        const show = r.dataset.head ? (hit(r) || headsShown.has(r.dataset.head)) : (hit(r) || headsHit.has(r.dataset.parent));
+        r.hidden = !show;
+        if (show && hit(r) && q) n++;
+      }
+      count.textContent = q ? (n ? `${n} match${n === 1 ? "" : "es"}` : "No games match") : "";
+    });
+  });
+
   // On phones the tab row scrolls sideways: bring the current page's tab into view.
   document.addEventListener("DOMContentLoaded", () => {
     const on = document.querySelector(".nav a.on"), nav = on && on.parentElement;

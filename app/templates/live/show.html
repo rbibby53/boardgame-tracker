@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% from "_macros.html" import who %}
+{% block title %}{{ night.title }} · {{ settings.app_name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ night.title }} {% if night.is_open %}<span class="tag live-dot">live</span>{% endif %}</h1>
+    <p class="muted">{{ night.started_at|utc("%A, %b %-d · started %-I:%M %p") }}{% if night.host %} · hosted by {{ night.host.display_name }}{% endif %}{% if night.location %} · {{ night.location }}{% endif %}</p>
+  </div>
+  {% if night.is_open %}
+  <div class="row">
+    {% if me_here %}
+      <form class="inline" method="post" action="/live/{{ night.id }}/leave" onsubmit="return confirm('Leave {{ night.title }}? You can come back any time.')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn">Leave</button></form>
+      {% if can('log_plays') %}<form class="inline" method="post" action="/live/{{ night.id }}/end" onsubmit="return confirm('End the night for everyone?')"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn ghost">End night</button></form>{% endif %}
+    {% else %}
+      <form class="inline" method="post" action="/live/{{ night.id }}/join"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="btn primary">I'm here: join</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div id="livePanel" class="live-panel" data-url="/live/{{ night.id }}/panel" data-open="{{ '1' if night.is_open else '0' }}" aria-live="polite">
+  {% include "live/_panel.html" %}
+</div>
+
+{% if night.is_open and can_run %}
+<div class="grid two" style="margin-top:1rem">
+  <section class="card">
+    <h2>Add a game to the pile</h2>
+    <form method="post" action="/live/{{ night.id }}/pile" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="search" name="name" list="allGames" placeholder="Type a game…" aria-label="Game to add" autocomplete="off" style="flex:1;min-width:0" required>
+      <button class="btn">Add</button>
+    </form>
+    <datalist id="allGames">{% for g in all_games %}<option value="{{ g.name }}">{% endfor %}</datalist>
+    {% if suggest %}<div class="hint" style="margin:.6rem 0 .3rem">Your favorites:</div>
+    <div class="chips">{% for g in suggest %}<form class="inline" method="post" action="/live/{{ night.id }}/pile"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="game_id" value="{{ g.id }}"><button class="chip">+ {{ g.name }}</button></form>{% endfor %}</div>{% endif %}
+  </section>
+  <section class="card">
+    <h2>Someone else is here</h2>
+    <p class="hint" style="margin-top:-.25rem">They don't need the app: mark them here so they're in the next game.</p>
+    {% if people %}<form method="post" action="/live/{{ night.id }}/people" class="row">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <select name="player_id" aria-label="Who arrived" style="flex:1;min-width:0">{% for p in people %}<option value="{{ p.id }}">{{ p.display_name }}</option>{% endfor %}</select>
+      <button class="btn">Add</button>
+    </form>{% endif %}
+    {% if can('manage_guests') %}<form method="post" action="/live/{{ night.id }}/people" class="row" style="margin-top:.5rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="guest" placeholder="New guest's name…" aria-label="Guest name" maxlength="150" style="flex:1;min-width:0" required>
+      <button class="btn">Add guest</button>
+    </form>{% endif %}
+  </section>
+</div>
+{% endif %}
+
+{% if is_host or can('edit_nights') %}
+<details class="more" style="margin-top:1rem">
+  <summary>Edit the night's name, place or notes</summary>
+  <form method="post" action="/live/{{ night.id }}/edit" class="card" style="margin-top:.5rem">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="fields">
+      <div><label for="t">Name</label><input type="text" id="t" name="title" value="{{ night.title }}" maxlength="150" required></div>
+      <div><label for="l">Where</label><input type="text" id="l" name="location" value="{{ night.location or '' }}" maxlength="200"></div>
+      <div class="wide"><label for="nn">Notes</label><textarea id="nn" name="notes">{{ night.notes or '' }}</textarea></div>
+    </div>
+    <div class="form-actions"><button class="btn primary">Save</button></div>
+  </form>
+</details>
+{% endif %}
+{% if night.notes %}<div class="card" style="margin-top:1rem"><p class="notes" style="margin:0">{{ night.notes }}</p></div>{% endif %}
+<script src="/static/live.js?v={{ V }}" defer></script>
+{% endblock %}

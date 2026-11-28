@@ -6,7 +6,9 @@
   <div class="row" style="gap:1rem">
     {% if game.has_cover %}<img class="cover" src="/covers/{{ game.id }}" alt="">{% endif %}
     <div>
-    <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}</h1>
+    <h1>{{ game.name }} {% if game.archived %}<span class="tag">archived</span>{% endif %}
+      <form class="inline" method="post" action="/games/{{ game.id }}/favorite"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="fav-btn" aria-pressed="{{ 'true' if is_fav else 'false' }}" title="{{ 'One of your favorites (tap to remove)' if is_fav else 'Add to your favorites' }}" aria-label="{{ 'Remove from' if is_fav else 'Add to' }} your favorites">{{ "★" if is_fav else "☆" }}</button></form></h1>
     {% if game.parent %}<p class="small" style="margin:0 0 .2rem">{{ "Part of" if game.in_box else "Variant of" }} <a href="/games/{{ game.parent.id }}">{{ game.parent.name }}</a></p>{% endif %}
     {% if box_view %}
     <p class="muted">Box of games · {{ kids|length }} mini-games{% if span[0] %} · {{ span[0] }}{% if span[1] and span[1] != span[0] %}–{{ span[1] }}{% endif %} players{% endif %}
@@ -40,6 +42,16 @@
 </div>
 
 {% if game.notes %}<div class="card" style="margin-bottom:1rem"><p class="notes" style="margin:0">{{ game.notes }}</p></div>{% endif %}
+
+{% if game.active_expansions %}
+<section class="card" style="margin-bottom:1rem">
+  <h2>Expansions{% if can('manage_games') %} <a class="small" style="font-weight:400" href="/games/{{ game.id }}/edit">edit</a>{% endif %}</h2>
+  <ul class="exp-list">{% for e in game.active_expansions %}
+    <li><span>{{ e.name }}</span>{% if e.owned %} <span class="tag" title="On our shelf">owned</span>{% endif %}
+      <span class="muted small">{% set n = exp_uses.get(e.id, 0) %}{{ "played with " ~ n ~ (" time" if n == 1 else " times") if n else "not played yet" }}</span></li>
+  {% endfor %}</ul>
+</section>
+{% endif %}
 
 {% if kids %}
 <section class="card flush" style="margin-bottom:1rem">

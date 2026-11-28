@@ -1,11 +1,26 @@
 {% extends "base.html" %}
-{% from "_macros.html" import who, play_list, chart %}
+{% from "_macros.html" import who, avatar, play_list, chart %}
 {% block content %}
 <div class="page-head">
   <div><h1>Hi, {{ user.display_name.split()[0] }}</h1>
   <p class="muted">You've played {{ totals.my_plays }} time{{ 's' if totals.my_plays != 1 }} and won {{ totals.my_wins }}.</p></div>
   {% if can('log_plays') %}<a class="btn primary" href="/plays/new">+ Log a play</a>{% endif %}
 </div>
+
+{% if live_nights or can('log_plays') %}
+<section class="live-now-list" aria-label="Game nights happening now">
+  {% for n in live_nights %}{% set here = n.here %}{% set mine = here|selectattr("player_id", "equalto", user.id)|list %}
+  <a class="card live-card" href="/live/{{ n.id }}">
+    <div class="row"><span class="tag live-dot">live</span><strong class="big">{{ n.title }}</strong></div>
+    <div class="small muted">{{ here|length }} here{% if n.host %} · hosted by {{ n.host.display_name }}{% endif %}{% if n.location %} · {{ n.location }}{% endif %}</div>
+    <div class="avatars">{% for m in here[:8] %}{{ avatar(m.player) }}{% endfor %}{% if here|length > 8 %}<span class="muted small">+{{ here|length - 8 }}</span>{% endif %}</div>
+    <div class="small">{% if n.current_game %}Now playing <strong>{{ n.current_game.name }}</strong>{% elif n.next_game %}Up next: <strong>{{ n.next_game.name }}</strong>{% else %}Picking a game{% endif %}</div>
+    <span class="btn {{ 'primary' if not mine else '' }} sm live-card-go">{{ "Open" if mine else "Join" }}</span>
+  </a>
+  {% endfor %}
+  {% if can('log_plays') %}<a class="card live-card live-start" href="/live/new"><strong>🎲 Start a game night</strong><span class="small muted">Everyone can join from their phone</span></a>{% endif %}
+</section>
+{% endif %}
 
 <div class="grid stats" style="margin-bottom:1rem">
   <div class="card stat"><div class="v">{{ totals.plays }}</div><div class="l">Plays logged</div></div>
@@ -14,8 +29,8 @@
 </div>
 
 {% if last_night %}
-<a class="card champion" href="/nights/{{ last_night.day.isoformat() }}" style="margin-bottom:1rem;color:inherit;text-decoration:none">
-  <div><div class="small muted">Last game night · {{ last_night.day.strftime("%A, %b %-d") }}</div>
+<a class="card champion" href="{{ last_night.url }}" style="margin-bottom:1rem;color:inherit;text-decoration:none">
+  <div><div class="small muted">{{ last_night.live.title if last_night.live else "Last game night" }} · {{ last_night.day.strftime("%A, %b %-d") }}</div>
     <strong>{{ last_night.plays|length }} game{{ 's' if last_night.plays|length != 1 }}</strong>
     {% if last_night.champions %} · 👑 {{ last_night.champions|map(attribute="display_name")|join(" & ") }}{% endif %}</div>
 </a>
