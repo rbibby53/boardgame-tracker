@@ -116,47 +116,51 @@ async def _read_game_form(request: Request, game: Game, db: Session) -> str | No
     game.min_players, game.max_players, game.bgg_id = mn, mx, bgg
     game.play_time_min, game.year = pt, yr
     game.notes = (form.get("notes") or "").strip() or None
+    game.is_box = form.get("is_box") == "on"
     err = _read_parent(db, game, form.get("parent_id"))
     return err or _sync_categories(db, game, form.get("categories") or "")
 
 
 def _read_parent(db: Session, game: Game, raw) -> str | None:
-    """'Part of' a collection. One level only, so a collection can't join another one."""
+    """'Part of': a mini-game in a box, or a variant of a game. One level only."""
     try:
         pid = _int_or_none(raw)
     except ValueError:
-        return "Unknown collection."
+        return "Unknown game."
     if pid is None:
         game.parent_id = None
         return None
     parent = db.get(Game, pid)
     if parent is None:
-        return "Unknown collection."
+        return "Unknown game."
     if game.id is not None and parent.id == game.id:
         return "A game can't be part of itself."
     if parent.parent_id is not None:
-        return f"{parent.name} is itself part of {parent.parent.name}. Pick the collection instead."
+        return f"{parent.name} is itself part of {parent.parent.name}. Pick {parent.parent.name} instead."
     if game.id is not None and game.children:
-        return f"{game.name} has its own mini-games, so it can't be part of another collection."
+        kind = "mini-games" if game.is_box else "variants"
+        return f"{game.name} has its own {kind}, so it can't be part of another game."
+    if game.is_box:
+        return "A box of games can't be part of another game."
     # parent_id, not the relationship: assigning game.parent would cascade a new game into the session
     # before the duplicate-name check, and that query's autoflush would then hit the UNIQUE constraint.
     game.parent_id = parent.id
-    game.owned = parent.owned  # the shelf is the collection's
+    if parent.is_box:
+        game.owned = parent.owned  # a mini-game is on the shelf when its box is; a variant has its own box
     return None
 
 
-def _collections(db: Session, exclude: Game | None = None) -> tuple[list[Game], list[Game]]:
-    """(existing collections, other top-level games) for the 'Part of' picker."""
+def _parent_choices(db: Session, exclude: Game | None = None) -> tuple[list[Game], list[Game]]:
+    """(boxes, other top-level games) for the 'Part of' picker."""
     top = db.scalars(select(Game).where(Game.parent_id.is_(None), Game.archived.is_(False))
-                     .options(selectinload(Game.children)).order_by(Game.name)).all()
-    top = [g for g in top if exclude is None or g.id != exclude.id]
-    top.sort(key=lambda g: natural_key(g.name))
-    return [g for g in top if g.children], [g for g in top if not g.children]
+                     .options(selectinload(Game.children))).all()
+    top = sorted((g for g in top if exclude is None or g.id != exclude.id), key=lambda g: natural_key(g.name))
+    return [g for g in top if g.is_box], [g for g in top if not g.is_box]
 
 
 def _form_ctx(db: Session, game: Game | None, **extra) -> dict:
-    cols, others = _collections(db, exclude=game)
-    return {"bgg_enabled": bgg.enabled(), "game": game, "collections": cols, "other_games": others, **extra}
+    boxes, games = _parent_choices(db, exclude=game)
+    return {"bgg_enabled": bgg.enabled(), "game": game, "boxes": boxes, "base_games": games, **extra}
 
 
 @router.get("")
@@ -224,26 +228,33 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
         raise HTTPException(404)
     kids = sorted(game.children, key=lambda c: natural_key(c.name))
     rt = ratings.table(db)
-    if kids:
-        # A collection: plays and standings across its mini-games. Scores, records, score sheets and ratings
-        # belong to each mini-game (they score differently), so those stay on the mini-game pages.
+    if game.is_box and kids:
+        # A box: plays and standings across its mini-games. Scores, records, score sheets and ratings belong
+        # to each mini-game (they score differently), so those stay on the mini-game pages.
         plays = stats.load_plays(db, game_ids=[game.id, *(c.id for c in kids)])
-        per_game = {}
-        for p in plays:
-            per_game[p.game_id] = per_game.get(p.game_id, 0) + 1
         records = stats.records(game, plays)
         records.update(best=None, margin=None)
         return render(request, "games/show.html", {
-            "game": game, "rt": rt, "kids": kids, "kid_plays": per_game, "span": _player_span(kids),
-            "rating_series": None, "board": stats.leaderboard(plays, include_coop=True), "records": records,
-            "recent": list(reversed(plays[-10:])), "play_count": len(plays), "score_series": None, "sheet": None,
-            "wins_series": stats.cumulative_wins_series(plays),
+            "game": game, "rt": rt, "box_view": True, "kids": kids, "kid_plays": _count_by_game(plays),
+            "span": _player_span(kids), "rating_series": None, "board": stats.leaderboard(plays, include_coop=True),
+            "records": records, "recent": list(reversed(plays[-10:])), "play_count": len(plays),
+            "score_series": None, "sheet": None, "wins_series": stats.cumulative_wins_series(plays),
         })
     plays = stats.load_plays(db, game_id=game_id)
+    family_board, kid_plays = None, {}
+    if kids:
+        # A base game with variants: its own stats as usual, plus the variants and standings across all versions.
+        family = stats.load_plays(db, game_ids=[game.id, *(c.id for c in kids)])
+        kid_plays = _count_by_game(family)
+        if len(family) > len(plays):
+            family_board = stats.leaderboard(family, include_coop=True)
     return render(request, "games/show.html", {
         "game": game,
         "rt": rt,
-        "kids": [],
+        "box_view": False,
+        "kids": kids,
+        "kid_plays": kid_plays,
+        "family_board": family_board,
         "rating_series": ratings.series(rt, plays, game_id=game_id),
         "board": stats.leaderboard(plays, include_coop=True),
         "records": stats.records(game, plays),
@@ -253,6 +264,13 @@ def show_game(game_id: int, request: Request, user: Player = Depends(current_use
         "sheet": stats.category_stats(game, plays),
         "wins_series": stats.cumulative_wins_series(plays),
     })
+
+
+def _count_by_game(plays: list[Play]) -> dict[int, int]:
+    out: dict[int, int] = {}
+    for p in plays:
+        out[p.game_id] = out.get(p.game_id, 0) + 1
+    return out
 
 
 @router.get("/{game_id}/edit")

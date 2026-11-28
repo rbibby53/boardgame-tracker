@@ -11,6 +11,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -93,9 +94,12 @@ class Game(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-    # Mini-games: a game can be part of a collection (e.g. Quiplash 3 in Jackbox Party Pack 7). One level only:
-    # a collection has no parent, and a mini-game has no mini-games. Shelf + archive status follow the collection.
+    # A game can be part of another one, one level deep (a parent has no parent):
+    # - in a box (is_box on the parent, e.g. Quiplash 3 in Jackbox Party Pack 7): a mini-game. The box isn't
+    #   played itself, and its mini-games follow its shelf + archive status.
+    # - of a normal game (e.g. Uno Flip of Uno): a variant. Both are played; each has its own shelf status.
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"), index=True)
+    is_box: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     parent: Mapped["Game | None"] = relationship(remote_side=lambda: [Game.id], back_populates="children")
     children: Mapped[list["Game"]] = relationship(back_populates="parent", order_by=lambda: Game.name)
@@ -113,12 +117,14 @@ class Game(Base):
         return SCORING_TYPES.get(self.scoring, self.scoring)
 
     @property
-    def is_collection(self) -> bool:
-        return bool(self.children)
+    def is_variant(self) -> bool:
+        return self.parent is not None and not self.parent.is_box
 
     def cascade_to_children(self, *, archived: bool = False) -> None:
-        """Mini-games follow their collection onto/off the shelf, and (when the collection itself is archived or
-        restored) into/out of the archive. A single mini-game can still be archived on its own."""
+        """A box's mini-games follow it onto/off the shelf, and (when the box itself is archived or restored)
+        into/out of the archive. A single mini-game can still be archived on its own. Variants are left alone."""
+        if not self.is_box:
+            return
         for c in self.children:
             c.owned = self.owned
             if archived:

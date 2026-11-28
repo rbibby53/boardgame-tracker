@@ -48,8 +48,8 @@ def can_edit(request: Request, user: Player, play: Play) -> bool:
 def _form_context(db: Session, user: Player, play: Play | None, state: dict, error: str | None = None) -> dict:
     games = db.scalars(select(Game).where(Game.archived.is_(False)).order_by(Game.name)
                        .options(selectinload(Game.categories), selectinload(Game.children))).all()
-    # Collections (e.g. a Jackbox pack) aren't played themselves: log the mini-game. Kept if this play already uses one.
-    games = [g for g in games if not g.children or (play is not None and g.id == play.game_id)]
+    # A box of games (e.g. a Jackbox pack) isn't played itself: log the mini-game. Kept if this play already uses one.
+    games = [g for g in games if not (g.is_box and g.children) or (play is not None and g.id == play.game_id)]
     if play is not None and play.game not in games:
         games = [play.game, *games]
     seated_ids = {s.player_id for s in play.seats} if play else set()
@@ -107,18 +107,25 @@ def _filter_games(db: Session) -> list[tuple[Game, bool]]:
 
 
 def _game_groups(games: list[Game]) -> list[tuple[Game | None, list[Game]]]:
-    """For the game <select>: standalone games as (None, [game]) and each collection's mini-games as
-    (collection, [mini-games]), in name order (a collection sorts by its own name)."""
+    """For the game <select>: standalone games as (None, [game]); a box's mini-games as (box, [mini-games]);
+    a game with variants as (game, [game, variants...]). Name order; a group sorts by its head's name."""
+    listed = {g.id for g in games}
     groups: dict[int, tuple[Game, list[Game]]] = {}
     out: list[tuple[Game | None, list[Game]]] = []
     for g in games:
-        if g.parent is not None and not g.parent.archived:
-            if g.parent_id not in groups:
-                groups[g.parent_id] = (g.parent, [])
-                out.append(groups[g.parent_id])
-            groups[g.parent_id][1].append(g)
+        if g.parent is not None and not g.parent.archived and (g.parent.is_box or g.parent_id in listed):
+            head = g.parent
+        elif not g.is_box and any(c.id in listed for c in g.children):
+            head = g  # a base game heads its own group, with its variants
         else:
             out.append((None, [g]))
+            continue
+        if head.id not in groups:
+            groups[head.id] = (head, [])
+            out.append(groups[head.id])
+        groups[head.id][1].append(g)
+    for head, members in groups.values():
+        members.sort(key=lambda m: (m.id != head.id, natural_key(m.name)))
     return sorted(out, key=lambda t: natural_key((t[0] or t[1][0]).name))
 
 
@@ -215,11 +222,12 @@ async def _apply_form(request: Request, db: Session, play: Play, user: Player) -
 
 @router.get("")
 def list_plays(request: Request, game: int | None = None, player: int | None = None, page: int = 1,
-               user: Player = Depends(current_user), db: Session = Depends(get_db)):
+               exact: bool = False, user: Player = Depends(current_user), db: Session = Depends(get_db)):
     q = select(Play).options(selectinload(Play.game), selectinload(Play.seats).selectinload(PlaySeat.player))
     if game:
+        # a box's mini-games / a game's variants are included, unless exact (just that one game)
         g = db.get(Game, game)
-        ids = [game, *(c.id for c in g.children)] if g is not None else [game]
+        ids = [game, *(c.id for c in g.children)] if g is not None and not exact else [game]
         q = q.where(Play.game_id.in_(ids))
     if player:
         q = q.where(Play.seats.any(PlaySeat.player_id == player))
@@ -230,7 +238,7 @@ def list_plays(request: Request, game: int | None = None, player: int | None = N
         "plays": plays, "page": page, "pages": max(1, -(-total // PAGE)), "total": total,
         "games": _filter_games(db),
         "players": db.scalars(select(Player).order_by(Player.display_name)).all(),
-        "f_game": game, "f_player": player,
+        "f_game": game, "f_player": player, "f_exact": exact,
     })
 
 

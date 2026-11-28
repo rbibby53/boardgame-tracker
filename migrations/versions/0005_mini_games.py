@@ -1,4 +1,8 @@
-"""mini-games: a game can be part of a collection (games.parent_id)
+"""mini-games and variants: a game can be part of another (games.parent_id, games.is_box)
+
+A parent with is_box set is a box of games that isn't played itself (a Jackbox Party Pack): its children are
+mini-games and follow its shelf/archive status. Any other parent is a playable base game (Uno): its children
+are variants (Uno Flip) with their own shelf status.
 
 Revision ID: 0005
 Revises: 0004
@@ -22,7 +26,9 @@ def upgrade() -> None:
     if op.get_bind().dialect.name == "sqlite":
         op.execute("ALTER TABLE games ADD COLUMN parent_id INTEGER "
                    "CONSTRAINT fk_games_parent_id_games REFERENCES games (id) ON DELETE SET NULL")
+        op.execute("ALTER TABLE games ADD COLUMN is_box BOOLEAN NOT NULL DEFAULT 0")
     else:
+        op.add_column('games', sa.Column('is_box', sa.Boolean(), nullable=False, server_default=sa.false()))
         op.add_column('games', sa.Column('parent_id', sa.Integer(), nullable=True))
         op.create_foreign_key(op.f('fk_games_parent_id_games'), 'games', 'games', ['parent_id'], ['id'],
                               ondelete='SET NULL')
@@ -32,7 +38,8 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index(op.f('ix_games_parent_id'), table_name='games')
     if op.get_bind().dialect.name == "sqlite":
-        # SQLite 3.35+ can drop a plain column, but not one with a REFERENCES clause; leave it (harmless, NULL).
+        # SQLite 3.35+ can drop a plain column, but not one with a REFERENCES clause; leave them (harmless).
         return
+    op.drop_column('games', 'is_box')
     op.drop_constraint(op.f('fk_games_parent_id_games'), 'games', type_='foreignkey')
     op.drop_column('games', 'parent_id')

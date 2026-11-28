@@ -18,11 +18,11 @@
       <tr{% if sub %} class="sub"{% endif %}>
         <td><a class="who" href="/games/{{ g.id }}">{% if sub %}<span class="muted" aria-hidden="true">↳</span>{% endif %}{% if g.has_cover %}<img class="cover sm" src="/covers/{{ g.id }}" alt="" loading="lazy">{% endif %}<strong class="n">{{ g.name }}</strong></a>
           {% if g.min_players %}<span class="muted small"> · {{ g.min_players }}{% if g.max_players and g.max_players != g.min_players %}–{{ g.max_players }}{% endif %}p</span>{% endif %}
-          {% if not sub and g.parent %}<span class="muted small"> · part of <a href="/games/{{ g.parent.id }}">{{ g.parent.name }}</a></span>{% endif %}</td>
-        <td class="small muted">{% if g.owned and not sub %}<span class="tag" title="On our shelf">owned</span> {% endif %}{% if count %}<span class="tag nowrap" title="Collection">{{ count }} games</span>{% else %}{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}{% endif %}</td>
+          {% if not sub and g.parent %}<span class="muted small"> · {{ "part" if g.parent.is_box else "variant" }} of <a href="/games/{{ g.parent.id }}">{{ g.parent.name }}</a></span>{% endif %}</td>
+        <td class="small muted">{% if g.owned and not (sub and g.parent and g.parent.is_box) %}<span class="tag" title="On our shelf">owned</span> {% endif %}{% if count and g.is_box %}<span class="tag nowrap" title="Box of games">{{ count }} games</span>{% else %}{{ g.scoring_label }}{% if g.uses_rounds %} · {{ (g.round_label or "round")|lower }}s{% endif %}{% if count %} <span class="tag nowrap" title="Variants">{{ count }} variant{{ "s" if count > 1 }}</span>{% endif %}{% endif %}</td>
         <td class="num">{{ n }}</td>
         <td class="num small muted nowrap">{{ last|dt("%b %-d, %Y") if last else "—" }}</td>
-        <td class="num">{% if can('log_plays') and not g.is_collection %}<a class="btn sm" href="/plays/new?game={{ g.id }}">Log</a>{% endif %}</td>
+        <td class="num">{% if can('log_plays') and not (g.is_box and count) %}<a class="btn sm" href="/plays/new?game={{ g.id }}">Log</a>{% endif %}</td>
       </tr>
     {% endmacro %}
     {% for e in entries %}

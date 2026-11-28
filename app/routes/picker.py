@@ -39,7 +39,7 @@ def pick(request: Request, players: str | None = None, minutes: str | None = Non
 
     results = []
     for g, count, last, avg_dur in rows:
-        if g.children:  # a collection: suggest its mini-games (their own player counts), not the box
+        if g.is_box and g.children:  # a box of games: suggest its mini-games (own player counts), not the box
             continue
         length = g.play_time_min or (round(avg_dur) if avg_dur else None)
         notes = []

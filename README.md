@@ -15,7 +15,7 @@
   <a href="https://github.com/rbibby53/boardgame-tracker/actions/workflows/docker.yml"><img src="https://github.com/rbibby53/boardgame-tracker/actions/workflows/docker.yml/badge.svg" alt="Build"></a>
   <a href="https://github.com/rbibby53/boardgame-tracker/pkgs/container/boardgame-tracker"><img src="https://img.shields.io/badge/ghcr.io-boardgame--tracker-2f6fdb?logo=docker&logoColor=white" alt="Container image"></a>
   <img src="https://img.shields.io/badge/arch-amd64%20%7C%20arm64-555" alt="amd64 | arm64">
-  <img src="https://img.shields.io/badge/python-3.13-3776ab?logo=python&logoColor=white" alt="Python 3.13">
+  <img src="https://img.shields.io/badge/python-3.15-3776ab?logo=python&logoColor=white" alt="Python 3.15">
   <img src="https://img.shields.io/badge/SSO-Authentik-fd4b2d" alt="Authentik SSO">
 </p>
 
@@ -369,15 +369,22 @@ You get a preview before anything is written. Players match by username, then na
 </details>
 
 <details>
-<summary><b>Mini-games (Jackbox packs and other collections)</b></summary>
+<summary><b>Mini-games and variants (Jackbox packs, Uno Flip…)</b></summary>
 
-Some boxes hold several games, like a Jackbox Party Pack. Add the box as a game, then add each game in it with **Part of** set to the box. You can also pick any existing game there to turn it into a collection.
+A game can be **Part of** another game, one level deep. There are two kinds:
 
-- **Games list:** mini-games are listed under their collection.
-- **Collection page:** its mini-games with play counts, plus standings and recent plays across all of them. Scores, records and ratings stay on each mini-game's page, because they score differently.
-- **Log a play** and **What should we play?** offer the mini-games, grouped under the collection, never the box itself. The picker uses each mini-game's own player count and length.
-- **Shelf and archive:** a mini-game follows its collection. Archiving or restoring the collection does the same to its mini-games; you can still archive one mini-game on its own.
-- One level only: a collection can't be part of another collection. Deleting a collection keeps its mini-games as standalone games.
+**Boxes of games** (a Jackbox Party Pack): tick *Box of games, not played itself* on the box, then add each game in it with **Part of** set to the box.
+
+- The box is never offered in **Log a play** or **What should we play?**. Its mini-games are, grouped under it, each with its own player count and length.
+- The box page lists its mini-games, with standings and recent plays across all of them. Scores, records and ratings stay on each mini-game's page.
+- Mini-games follow the box's shelf status. Archiving or restoring the box does the same to them; you can still archive one on its own.
+
+**Variants** (Uno Flip and Uno Attack of Uno, Ticket to Ride: Europe…): set **Part of** to the base game.
+
+- The base game and each variant are played, rated and shelved separately, with their own scoring, score sheet and player counts.
+- The base game's page adds a *Variants* list and *All versions* standings. Filtering plays by the base game includes its variants.
+
+Deleting a box or base game keeps its mini-games or variants as standalone games.
 </details>
 
 <details>

@@ -10,7 +10,7 @@ from .conftest import login
 
 
 def make_pack(db):
-    pack = Game(name="Jackbox Party Pack 7", owned=True)
+    pack = Game(name="Jackbox Party Pack 7", owned=True, is_box=True)
     q = Game(name="Quiplash 3", scoring="high", min_players=3, max_players=8, play_time_min=20, owned=True)
     b = Game(name="Blather 'Round", scoring="winloss", min_players=2, max_players=6, play_time_min=20, owned=True)
     q.parent, b.parent = pack, pack
@@ -26,7 +26,7 @@ def game_form(csrf, **kw):
 
 def test_add_mini_game_via_form_follows_collection_shelf(client, db):
     csrf = login(client)
-    pack = Game(name="Jackbox Party Pack 8", owned=False)
+    pack = Game(name="Jackbox Party Pack 8", owned=False, is_box=True)
     db.add(pack)
     db.commit()
     # "owned" is ticked, but the shelf is the collection's
@@ -48,8 +48,11 @@ def test_nesting_rules(client, db):
     r = client.post("/games", data=game_form(csrf, name="Deep", parent_id=str(q.id)))
     assert r.status_code == 422 and "is itself part of" in r.text
     # a collection can't join another collection
-    r = client.post(f"/games/{pack.id}", data=game_form(csrf, name=pack.name, parent_id=str(solo.id)))
+    r = client.post(f"/games/{pack.id}", data=game_form(csrf, name=pack.name, parent_id=str(solo.id), is_box="on"))
     assert r.status_code == 422 and "has its own mini-games" in r.text
+    # a box can't be put in something else either, even without mini-games yet
+    r = client.post("/games", data=game_form(csrf, name="New Box", parent_id=str(solo.id), is_box="on"))
+    assert r.status_code == 422 and "A box of games can" in r.text
     # nor itself
     r = client.post(f"/games/{solo.id}", data=game_form(csrf, name="Catan", parent_id=str(solo.id)))
     assert r.status_code == 422 and "part of itself" in r.text
@@ -57,13 +60,14 @@ def test_nesting_rules(client, db):
     r = client.post("/games", data=game_form(csrf, name="quiplash 3", parent_id=str(pack.id)))
     assert r.status_code == 422 and "already exists" in r.text
     # a collection's edit form explains instead of offering the picker
-    assert "This is a collection of 2 mini-games" in client.get(f"/games/{pack.id}/edit").text
+    assert "has 2 mini-games" in client.get(f"/games/{pack.id}/edit").text
 
 
 def test_shelf_and_archive_cascade(client, db):
     csrf = login(client)
     pack, q, b, _ = make_pack(db)
-    r = client.post(f"/games/{pack.id}", data=game_form(csrf, name=pack.name), follow_redirects=False)  # owned off
+    r = client.post(f"/games/{pack.id}", data=game_form(csrf, name=pack.name, is_box="on"),
+                    follow_redirects=False)  # owned off
     assert r.status_code == 303
     db.expire_all()
     assert not q.owned and not b.owned
@@ -100,7 +104,7 @@ def test_lists_pages_and_play_form(client, db):
                     follow_redirects=False)
     assert r.status_code == 303, r.text
     page = client.get(f"/games/{pack.id}").text
-    assert "Collection · 2 mini-games · 2–8 players" in page and "Mini-games" in page and "Wins over time" in page
+    assert "Box of games · 2 mini-games · 2–8 players" in page and "Mini-games" in page and "Wins over time" in page
     assert ">Rating<" not in page and "+ Add mini-game" in page
     assert "Part of" in client.get(f"/games/{q.id}").text
     # the collection's play filter includes its mini-games
@@ -143,7 +147,7 @@ def test_bgg_collection_sync_leaves_mini_games_to_their_collection(client, db):
 def test_score_sheet_lines_survive_parent_changes(client, db):
     """Moving a game into a collection must not touch its score sheet or plays."""
     csrf = login(client)
-    pack = Game(name="Pack")
+    pack = Game(name="Pack", is_box=True)
     g = Game(name="Wingspan")
     g.categories.append(GameCategory(name="Birds"))
     db.add_all([pack, g])
@@ -159,7 +163,7 @@ def test_score_sheet_lines_survive_parent_changes(client, db):
 def test_natural_sort_keeps_pack_numbers_in_order(client, db):
     login(client)
     for n in (1, 2, 10):
-        p = Game(name=f"Jackbox Party Pack {n}")
+        p = Game(name=f"Jackbox Party Pack {n}", is_box=True)
         c = Game(name=f"Mini {n}")
         c.parent = p
         db.add_all([p, c])
@@ -168,3 +172,64 @@ def test_natural_sort_keeps_pack_numbers_in_order(client, db):
     assert html.index("Jackbox Party Pack 2<") < html.index("Jackbox Party Pack 10<")
     form = client.get("/plays/new").text
     assert form.index('label="Jackbox Party Pack 2"') < form.index('label="Jackbox Party Pack 10"')
+
+
+def make_uno(db):
+    uno = Game(name="Uno", min_players=2, max_players=10, owned=True)
+    flip = Game(name="Uno Flip", min_players=2, max_players=10, owned=False)
+    attack = Game(name="Uno Attack", min_players=2, max_players=10, owned=True)
+    flip.parent, attack.parent = uno, uno
+    db.add_all([uno, flip, attack])
+    db.commit()
+    return uno, flip, attack
+
+
+def test_variants_keep_their_own_shelf_and_base_stays_playable(client, db):
+    csrf = login(client, "Ryan")
+    uno, flip, attack = make_uno(db)
+    # editing the base doesn't touch its variants' shelf or archive status
+    r = client.post(f"/games/{uno.id}", data=game_form(csrf, name="Uno"), follow_redirects=False)  # owned off
+    assert r.status_code == 303
+    client.post(f"/games/{uno.id}/archive", data={"csrf": csrf})
+    db.expire_all()
+    assert not uno.owned and uno.archived and attack.owned and not flip.owned and not attack.archived
+    client.post(f"/games/{uno.id}/archive", data={"csrf": csrf})
+    # a new variant keeps the shelf box it was given
+    r = client.post("/games", data=game_form(csrf, name="Uno All Wild", parent_id=str(uno.id), owned="on"),
+                    follow_redirects=False)
+    assert r.status_code == 303
+    db.expire_all()
+    assert db.scalar(select(Game).where(Game.name == "Uno All Wild")).owned is True
+
+    html = client.get("/games").text
+    assert "3 variants" in html and f'/plays/new?game={uno.id}"' in html  # base is still loggable
+    form = client.get("/plays/new").text
+    group = form[form.index('<optgroup label="Uno">'):]
+    group = group[:group.index("</optgroup>")]
+    assert group.index(f'value="{uno.id}"') < group.index("Uno All Wild") < group.index("Uno Attack")
+    pick = client.get("/pick?shelf=all").text
+    assert f'href="/games/{uno.id}"' in pick and "· variant of Uno" in pick
+
+
+def test_base_game_page_shows_variants_and_all_versions(client, db):
+    csrf = login(client, "Ryan")
+    uno, flip, attack = make_uno(db)
+    ryan = db.scalar(select(Player).where(Player.display_name == "Ryan"))
+    for g in (uno, flip, flip):
+        r = client.post("/plays", data={"csrf": csrf, "game_id": str(g.id), "played_at": "2026-11-20T19:30",
+                                        "payload": json.dumps({"players": [{"player_id": ryan.id, "score": 10}]})},
+                        follow_redirects=False)
+        assert r.status_code == 303, r.text
+    page = client.get(f"/games/{uno.id}").text
+    assert "Variants" in page and "+ Add variant" in page and "All versions" in page
+    assert ">Rating<" in page  # the base keeps its own per-game columns
+    assert "Variant of" in client.get(f"/games/{flip.id}").text
+    assert client.get(f"/plays?game={uno.id}").text.count("Ryan · 10") == 3
+    assert client.get(f"/plays?game={uno.id}&exact=1").text.count("Ryan · 10") == 1
+    assert "Uno (all versions)" in client.get("/plays").text
+
+
+def test_bgg_sync_treats_variants_as_their_own_boxes(client, db):
+    uno, flip, attack = make_uno(db)
+    gone = {g.name for g in collection.plan(db, [])["gone"]}
+    assert gone == {"Uno", "Uno Attack"}
